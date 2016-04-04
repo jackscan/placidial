@@ -1,0 +1,19 @@
+{
+  "uuid": "61cb766e-ddf9-43dc-843e-48fb34db1db5",
+  "shortName": "placidial",
+  "longName": "Placid Dial",
+  "companyName": "JacksCan",
+  "versionLabel": "1.0",
+  "sdkVersion": "3",
+  "targetPlatforms": ["basalt", "chalk"],
+  "enableMultiJS": true,
+  "watchapp": {
+    "watchface": true
+  },
+  "appKeys": {
+    "dummy": 0
+  },
+  "resources": {
+    "media": []
+  }
+}

@@ -1,0 +1,14 @@
+# Ignore build generated files
+build
+
+# Ignore waf lock file
+.lock-waf*
+
+# Ignore clang files
+.clang*
+
+# Ignore ctags files
+.tags*
+
+# Ignore atom build file
+.atom-build.*
