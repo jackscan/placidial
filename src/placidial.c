@@ -29,6 +29,9 @@ struct
     Window *window;
     uint8_t bgcol;
     int hour, min, sec;
+    struct {
+        int32_t dx, dy;
+    } shadow;
 } g;
 
 static void redraw(struct Layer *layer, GContext *ctx)
@@ -56,33 +59,45 @@ static void redraw(struct Layer *layer, GContext *ctx)
         memset(row.data + row.min_x, g.bgcol, row.max_x - row.min_x + 1);
     }
 
-    // render hour
+    int32_t cx = fixed(w2);
+    int32_t cy = fixed(h2);
+
+    struct
     {
-        int32_t r = mr * 5 / 8;
+        int32_t dx, dy, r;
+    } hour, min;
+
+    // hour
+    {
+        hour.r = mr * 5 / 8;
         int32_t a = ((g.hour * 60 + g.min) * TRIG_MAX_ANGLE) / 720;
         int32_t sina = sin_lookup(a);
         int32_t cosa = cos_lookup(a);
-
-        int32_t dx = sina * r / TRIG_MAX_RATIO;
-        int32_t dy = -cosa * r / TRIG_MAX_RATIO;
-
-        draw_rect(bmp, 0xFF, fixed(w2) - dx / 8, fixed(h2) - dy / 8, dx, dy, r,
-                  fixed(4));
+        hour.dx = sina * hour.r / TRIG_MAX_RATIO;
+        hour.dy = -cosa * hour.r / TRIG_MAX_RATIO;
     }
 
-    // render minute
+    // minute
     {
-        int32_t r = mr * 7 / 8;
+        min.r = mr * 7 / 8;
         int32_t a = (g.min * TRIG_MAX_ANGLE) / 60;
         int32_t sina = sin_lookup(a);
         int32_t cosa = cos_lookup(a);
-
-        int32_t dx = sina * r / TRIG_MAX_RATIO;
-        int32_t dy = -cosa * r / TRIG_MAX_RATIO;
-
-        draw_rect(bmp, 0xFF, fixed(w2) - dx / 8, fixed(h2) - dy / 8, dx, dy, r,
-                  fixed(4));
+        min.dx = sina * min.r / TRIG_MAX_RATIO;
+        min.dy = -cosa * min.r / TRIG_MAX_RATIO;
     }
+
+    draw_rect(bmp, 0xC0, cx + g.shadow.dx - hour.dx / 8,
+              cy + g.shadow.dy - hour.dy / 8,
+              hour.dx, hour.dy, hour.r, fixed(4));
+    draw_rect(bmp, 0xC0, cx + g.shadow.dx - min.dx / 8,
+              cy + g.shadow.dy - min.dy / 8,
+              min.dx, min.dy, min.r, fixed(4));
+
+    draw_rect(bmp, 0xFF, cx - hour.dx / 8, cy - hour.dy / 8,
+              hour.dx, hour.dy, hour.r, fixed(4));
+    draw_rect(bmp, 0xFF, cx - min.dx / 8, cy - min.dy / 8,
+              min.dx, min.dy, min.r, fixed(4));
 
     graphics_release_frame_buffer(ctx, bmp);
 }
@@ -109,6 +124,8 @@ static void window_unload(Window *window)
 static void init()
 {
     g.bgcol = 0xC6;
+    g.shadow.dx = fixed(2);
+    g.shadow.dy = fixed(3);
     g.window = window_create();
     window_set_window_handlers(g.window,
                                (WindowHandlers){
