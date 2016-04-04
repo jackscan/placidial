@@ -27,6 +27,7 @@
 struct
 {
     Window *window;
+    uint8_t bgcol;
     int hour, min, sec;
 } g;
 
@@ -52,7 +53,7 @@ static void redraw(struct Layer *layer, GContext *ctx)
     for (int y = 0; y < bounds.size.h; ++y)
     {
         GBitmapDataRowInfo row = gbitmap_get_data_row_info(bmp, y);
-        memset(row.data + row.min_x, 0x00, row.max_x - row.min_x + 1);
+        memset(row.data + row.min_x, g.bgcol, row.max_x - row.min_x + 1);
     }
 
     // render hour
@@ -107,6 +108,7 @@ static void window_unload(Window *window)
 
 static void init()
 {
+    g.bgcol = 0xC6;
     g.window = window_create();
     window_set_window_handlers(g.window,
                                (WindowHandlers){
