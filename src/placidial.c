@@ -43,6 +43,13 @@ static void redraw(struct Layer *layer, GContext *ctx)
         return;
     }
 
+    AccelData accel;
+    if (accel_service_peek(&accel) >= 0)
+    {
+        g.shadow.dx = fixed(accel.x) / 192;
+        g.shadow.dy = fixed(-accel.y) / 192;
+    }
+
     APP_LOG(APP_LOG_LEVEL_INFO, "framebuffer");
 
     GRect bounds = gbitmap_get_bounds(bmp);
