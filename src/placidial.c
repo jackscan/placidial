@@ -42,8 +42,6 @@ static void redraw(struct Layer *layer, GContext *ctx)
     APP_LOG(APP_LOG_LEVEL_INFO, "framebuffer");
 
     GRect bounds = gbitmap_get_bounds(bmp);
-    GSize size = bounds.size;
-    int stride = gbitmap_get_bytes_per_row(bmp);
 
     int16_t w2 = bounds.size.w / 2;
     int16_t h2 = bounds.size.h / 2;

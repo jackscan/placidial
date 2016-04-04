@@ -74,7 +74,6 @@ void draw_rect(struct GBitmap *bmp, uint8_t color, int32_t px, int32_t py,
     w += fs2;
     int32_t s0 = -fs2;
     int32_t s1 = len + fs2;
-    int32_t sm = (s0 + s1) / 2;
 
     int32_t wdx = ((dx < 0 ? -dx : dx) * w) / len;
     int32_t sdy = (fs2 * dy) / len;
