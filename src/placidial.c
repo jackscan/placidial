@@ -94,6 +94,21 @@ static void redraw(struct Layer *layer, GContext *ctx)
         min.dy = -cosa * min.r / TRIG_MAX_RATIO;
     }
 
+    for (int i = 0; i < 12; ++i)
+    {
+        int32_t a = (i * TRIG_MAX_ANGLE) / 12;
+        int32_t sina = sin_lookup(a);
+        int32_t cosa = cos_lookup(a);
+        int32_t s = mr * 7 / 8;
+        int32_t px = cx + sina * s / TRIG_MAX_RATIO;
+        int32_t py = cy + cosa * s / TRIG_MAX_RATIO;
+        int32_t r = mr / 16;
+        int32_t dx = sina * r / TRIG_MAX_RATIO;
+        int32_t dy = cosa * r / TRIG_MAX_RATIO;
+
+        draw_rect(bmp, 0xFF, px, py, dx, dy, r, fixed(1));
+    }
+
     draw_rect(bmp, 0xC0, cx + g.shadow.dx - hour.dx / 8,
               cy + g.shadow.dy - hour.dy / 8,
               hour.dx, hour.dy, hour.r, fixed(4));
