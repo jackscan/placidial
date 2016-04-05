@@ -31,6 +31,7 @@ struct
     int hour, min, sec;
     struct {
         int32_t dx, dy;
+        bool enable;
     } shadow;
 } g;
 
@@ -44,10 +45,10 @@ static void redraw(struct Layer *layer, GContext *ctx)
     }
 
     AccelData accel;
-    if (accel_service_peek(&accel) >= 0)
+    if (g.shadow.enable && accel_service_peek(&accel) >= 0)
     {
-        g.shadow.dx = fixed(accel.x) / 192;
-        g.shadow.dy = fixed(-accel.y) / 192;
+        g.shadow.dx = fixed(accel.x) / 256;
+        g.shadow.dy = fixed(-accel.y) / 256;
     }
 
     APP_LOG(APP_LOG_LEVEL_INFO, "framebuffer");
@@ -109,12 +110,15 @@ static void redraw(struct Layer *layer, GContext *ctx)
         draw_rect(bmp, 0xFF, px, py, dx, dy, r, fixed(1));
     }
 
-    draw_rect(bmp, 0xC0, cx + g.shadow.dx - hour.dx / 8,
-              cy + g.shadow.dy - hour.dy / 8,
-              hour.dx, hour.dy, hour.r, fixed(4));
-    draw_rect(bmp, 0xC0, cx + g.shadow.dx - min.dx / 8,
-              cy + g.shadow.dy - min.dy / 8,
-              min.dx, min.dy, min.r, fixed(4));
+    if (g.shadow.enable)
+    {
+        draw_rect(bmp, 0xC0, cx + g.shadow.dx - hour.dx / 8,
+                  cy + g.shadow.dy - hour.dy / 8,
+                  hour.dx, hour.dy, hour.r, fixed(4));
+        draw_rect(bmp, 0xC0, cx + g.shadow.dx - min.dx / 8,
+                  cy + g.shadow.dy - min.dy / 8,
+                  min.dx, min.dy, min.r, fixed(4));
+    }
 
     draw_rect(bmp, 0xFF, cx - hour.dx / 8, cy - hour.dy / 8,
               hour.dx, hour.dy, hour.r, fixed(4));
@@ -145,9 +149,6 @@ static void window_unload(Window *window)
 
 static void init()
 {
-    g.bgcol = 0xC6;
-    g.shadow.dx = fixed(2);
-    g.shadow.dy = fixed(3);
     g.window = window_create();
     window_set_window_handlers(g.window,
                                (WindowHandlers){
