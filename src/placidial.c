@@ -33,6 +33,10 @@ struct
         int32_t dx, dy;
         bool enable;
     } shadow;
+
+    struct {
+        int32_t w, h;
+    } marker;
 } g;
 
 static void redraw(struct Layer *layer, GContext *ctx)
@@ -95,19 +99,23 @@ static void redraw(struct Layer *layer, GContext *ctx)
         min.dy = -cosa * min.r / TRIG_MAX_RATIO;
     }
 
-    for (int i = 0; i < 12; ++i)
+    // dial marker
     {
-        int32_t a = (i * TRIG_MAX_ANGLE) / 12;
-        int32_t sina = sin_lookup(a);
-        int32_t cosa = cos_lookup(a);
-        int32_t s = mr * 7 / 8;
-        int32_t px = cx + sina * s / TRIG_MAX_RATIO;
-        int32_t py = cy + cosa * s / TRIG_MAX_RATIO;
-        int32_t r = mr / 16;
-        int32_t dx = sina * r / TRIG_MAX_RATIO;
-        int32_t dy = cosa * r / TRIG_MAX_RATIO;
+        int32_t s = mr * 15 / 16;
+        int32_t r = g.marker.h;
 
-        draw_rect(bmp, 0xFF, px, py, dx, dy, r, fixed(1));
+        for (int i = 0; i < 12; ++i)
+        {
+            int32_t a = (i * TRIG_MAX_ANGLE) / 12;
+            int32_t sina = sin_lookup(a);
+            int32_t cosa = cos_lookup(a);
+            int32_t px = cx + sina * s / TRIG_MAX_RATIO;
+            int32_t py = cy + cosa * s / TRIG_MAX_RATIO;
+            int32_t dx = -sina * r / TRIG_MAX_RATIO;
+            int32_t dy = -cosa * r / TRIG_MAX_RATIO;
+
+            draw_rect(bmp, 0xFF, px, py, dx, dy, r, g.marker.w);
+        }
     }
 
     if (g.shadow.enable)
@@ -149,6 +157,8 @@ static void window_unload(Window *window)
 
 static void init()
 {
+    g.marker.w = fixed(2);
+    g.marker.h = fixed(5);
     g.window = window_create();
     window_set_window_handlers(g.window,
                                (WindowHandlers){
