@@ -29,6 +29,7 @@ struct
     Window *window;
     uint8_t bgcol;
     int hour, min, sec;
+    int wday, mday;
     struct {
         int32_t dx, dy;
         bool enable;
@@ -38,6 +39,39 @@ struct
         int32_t w, h;
     } marker;
 } g;
+
+static void draw_week(GBitmap *bmp, int x, int y)
+{
+    const int w = 4;
+    const int dx = 8;
+    const int dy = 7;
+
+    for (int i = 0; i < 4; ++i)
+    {
+        uint8_t color = i == g.wday ? 0xF0 : i == 0 ? 0xDB : 0xFF;
+        draw_box(bmp, color, x + i * dx, y, w, w);
+    }
+
+    for (int i = 1; i < 4; ++i)
+    {
+        uint8_t color = i + 3 == g.wday ? 0xF0 : 0xFF;
+        draw_box(bmp, color, x + i * dx, y + dy, w, w);
+    }
+}
+
+static void draw_day(GBitmap *bmp, int x, int y)
+{
+    int x0 = (x - DIGIT_WIDTH) & ~0x3;
+    int x1 = x0 + DIGIT_WIDTH + 4;
+    int my = 2;
+
+    draw_week(bmp, x0, y + my);
+
+    int d10 = g.mday / 10;
+    int d01 = g.mday - d10 * 10;
+    draw_digit(bmp, x0, y - DIGIT_HEIGHT - my, d10);
+    draw_digit(bmp, x1, y - DIGIT_HEIGHT - my, d01);
+}
 
 static void draw_marker(GBitmap *bmp, int cx, int cy, int a, int r, int s)
 {
@@ -49,6 +83,11 @@ static void draw_marker(GBitmap *bmp, int cx, int cy, int a, int r, int s)
     int32_t dy = cosa * r / TRIG_MAX_RATIO;
 
     draw_rect(bmp, 0xFF, px, py, dx, dy, r, g.marker.w);
+}
+
+static inline int absi(int i)
+{
+    return i < 0 ? -i : i;
 }
 
 static void redraw(struct Layer *layer, GContext *ctx)
@@ -111,6 +150,21 @@ static void redraw(struct Layer *layer, GContext *ctx)
         min.dy = -cosa * min.r / TRIG_MAX_RATIO;
     }
 
+    // day
+    {
+        int r = (mr >> FIXED_SHIFT) * 9 / 16;
+        int dx = 0, dy = 0;
+
+        if (hour.dx < absi(hour.dy) && min.dx < absi(min.dy))
+            dx = r;
+        else if (hour.dx > -absi(hour.dy) && min.dx > -absi(min.dy))
+            dx = -r;
+        else
+            dy = -r;
+
+        draw_day(bmp, w2 + dx, h2 + dy);
+    }
+
     // dial marker
     {
         int32_t s = mr * 15 / 16;
@@ -146,6 +200,8 @@ static void tick_handler(struct tm *t, TimeUnits units_changed)
     g.hour = t->tm_hour;
     g.min = t->tm_min;
     g.sec = t->tm_sec;
+    g.wday = t->tm_wday;
+    g.mday = t->tm_mday;
     layer_mark_dirty(window_get_root_layer(g.window));
 }
 

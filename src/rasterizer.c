@@ -55,6 +55,16 @@ static inline uint8_t blend(uint32_t x, uint32_t y, int a)
     return (uint8_t)(((b & 0xCC) + (c & 0x330)) >> 2);
 }
 
+void draw_box(struct GBitmap *bmp, uint8_t color, int x, int y, int w, int h)
+{
+    for (int i = 0; i < h; ++i)
+    {
+        uint8_t *line = gbitmap_get_data_row_info(bmp, (unsigned)(y + i)).data;
+        for (int j = 0; j < w; ++j)
+            line[x + j] = color;
+    }
+}
+
 void draw_rect(struct GBitmap *bmp, uint8_t color, int32_t px, int32_t py,
                       int32_t dx, int32_t dy, int32_t len, int32_t w)
 {
@@ -129,4 +139,32 @@ void draw_rect(struct GBitmap *bmp, uint8_t color, int32_t px, int32_t py,
             else line[x] = blend(line[x], color, a);
         }
     }
+}
+
+void draw_digit(struct GBitmap *bmp, int x, int y, int n)
+{
+    static const uint32_t digitmask[5] = {
+        07777717737,
+        05541114425,
+        07747756725,
+        04545474125,
+        07747747777,
+    };
+
+    int h = 3;
+    int s = x >> 2;
+    int n3 = n * 3;
+
+    for (int r = 0; r < 5; ++r)
+    {
+        int k = r < 1 || 2 < r ? h : h - 1;
+        for (int i = 0; i < k; ++i, ++y)
+        {
+            uint32_t mask = (digitmask[r] >> n3) & 0x7;
+            uint32_t *line = (uint32_t *)gbitmap_get_data_row_info(bmp, y).data;
+            for (int j = 0; mask; ++j, mask >>= 1)
+                if (mask & 1) line[s + j] = 0xFFFFFFFF;
+        }
+    }
+
 }

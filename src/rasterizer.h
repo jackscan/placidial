@@ -27,8 +27,13 @@
 
 #define FIXED_SHIFT 4
 
+#define DIGIT_HEIGHT 13
+#define DIGIT_WIDTH 12
+
 struct GBitmap;
 
+void draw_digit(struct GBitmap *bmp, int x, int y, int n);
+void draw_box(struct GBitmap *bmp, uint8_t color, int x, int y, int w, int h);
 void draw_rect(struct GBitmap *bmp, uint8_t color, int32_t px, int32_t py,
                int32_t dx, int32_t dy, int32_t len, int32_t w);
 
