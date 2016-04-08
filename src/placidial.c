@@ -39,6 +39,18 @@ struct
     } marker;
 } g;
 
+static void draw_marker(GBitmap *bmp, int cx, int cy, int a, int r, int s)
+{
+    int32_t sina = sin_lookup(a);
+    int32_t cosa = cos_lookup(a);
+    int32_t px = cx + sina * s / TRIG_MAX_RATIO;
+    int32_t py = cy - cosa * s / TRIG_MAX_RATIO;
+    int32_t dx = -sina * r / TRIG_MAX_RATIO;
+    int32_t dy = cosa * r / TRIG_MAX_RATIO;
+
+    draw_rect(bmp, 0xFF, px, py, dx, dy, r, g.marker.w);
+}
+
 static void redraw(struct Layer *layer, GContext *ctx)
 {
     GBitmap *bmp = graphics_capture_frame_buffer(ctx);
@@ -104,18 +116,11 @@ static void redraw(struct Layer *layer, GContext *ctx)
         int32_t s = mr * 15 / 16;
         int32_t r = g.marker.h;
 
-        for (int i = 0; i < 12; ++i)
-        {
-            int32_t a = (i * TRIG_MAX_ANGLE) / 12;
-            int32_t sina = sin_lookup(a);
-            int32_t cosa = cos_lookup(a);
-            int32_t px = cx + sina * s / TRIG_MAX_RATIO;
-            int32_t py = cy + cosa * s / TRIG_MAX_RATIO;
-            int32_t dx = -sina * r / TRIG_MAX_RATIO;
-            int32_t dy = -cosa * r / TRIG_MAX_RATIO;
+        int32_t a = (g.min + 2) * 12 / 60 * TRIG_MAX_ANGLE / 12;
+        int32_t b = (g.hour * 60 + g.min + 30) * 12 / 720 * TRIG_MAX_ANGLE / 12;
 
-            draw_rect(bmp, 0xFF, px, py, dx, dy, r, g.marker.w);
-        }
+        draw_marker(bmp, cx, cy, a, r, s);
+        if (a != b) draw_marker(bmp, cx, cy, b, r, s);
     }
 
     if (g.shadow.enable)
