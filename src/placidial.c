@@ -208,6 +208,8 @@ static void redraw(struct Layer *layer, GContext *ctx)
     draw_rect(bmp, 0xFF, cx - min.dx / 8, cy - min.dy / 8,
               min.dx, min.dy, min.r, fixed(4));
 
+    draw_circle(bmp, 0xFF, cx, cy, fixed(7));
+
     graphics_release_frame_buffer(ctx, bmp);
 }
 

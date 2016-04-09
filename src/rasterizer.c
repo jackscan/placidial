@@ -65,6 +65,39 @@ void draw_box(struct GBitmap *bmp, uint8_t color, int x, int y, int w, int h)
     }
 }
 
+void draw_circle(struct GBitmap *bmp, uint8_t color, int32_t cx, int32_t cy,
+                 int32_t r)
+{
+    int32_t half = (1 << (FIXED_SHIFT - 1));
+    int smooth = 2;
+    int32_t fs2 = fixed(smooth)/2;
+
+    int y0 = fixedfloor(cy - r);
+    int y1 = fixedceil(cy + r);
+    int x0 = fixedfloor(cx - r);
+    int x1 = fixedfloor(cx + r);
+
+    int32_t r0 = r - fs2;
+    int32_t r1 = r + fs2;
+    int32_t r2 = r1 * r1;
+    int32_t rs = r2 - r0 * r0;
+
+    for (int y = y0; y < y1; ++y)
+    {
+        int32_t dy = fixed(y) + half - cy;
+        uint8_t *line = gbitmap_get_data_row_info(bmp, (unsigned)y).data;
+        for (int x = x0; x < x1; ++x)
+        {
+            int32_t dx = fixed(x) + half - cx;
+            int32_t ds = dx * dx + dy * dy;
+            int32_t a = (r2 - ds) * 5 / rs;
+            if (a <= 0) continue;
+            if (a >= 5) line[x] = color;
+            else line[x] = blend(line[x], color, a);
+        }
+    }
+}
+
 void draw_rect(struct GBitmap *bmp, uint8_t color, int32_t px, int32_t py,
                       int32_t dx, int32_t dy, int32_t len, int32_t w)
 {
