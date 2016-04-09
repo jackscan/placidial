@@ -40,11 +40,6 @@ struct
     } day;
 
     struct {
-        int32_t dx, dy;
-        bool enable;
-    } shadow;
-
-    struct {
         int32_t w, h;
     } marker;
 } g;
@@ -123,13 +118,6 @@ static void redraw(struct Layer *layer, GContext *ctx)
     {
         APP_LOG(APP_LOG_LEVEL_ERROR, "failed to capture framebuffer");
         return;
-    }
-
-    AccelData accel;
-    if (g.shadow.enable && accel_service_peek(&accel) >= 0)
-    {
-        g.shadow.dx = fixed(accel.x) / 256;
-        g.shadow.dy = fixed(-accel.y) / 256;
     }
 
     GRect bounds = gbitmap_get_bounds(bmp);
