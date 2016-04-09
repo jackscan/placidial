@@ -98,6 +98,96 @@ void draw_circle(struct GBitmap *bmp, uint8_t color, int32_t cx, int32_t cy,
     }
 }
 
+void draw_white_rect(struct GBitmap *bmp, int32_t px, int32_t py,
+                      int32_t dx, int32_t dy, int32_t len, int32_t w)
+{
+    // length of (dx, dy) is assumed to be fixed(256)
+    const int dshift = FIXED_SHIFT + 8;
+
+    // (dx, dy) shall point downwards or right
+    if (dy < 0 || (dy == 0 && dx < 0))
+    {
+        px += (dx * len) >> dshift;
+        py += (dy * len) >> dshift;
+        dx = -dx;
+        dy = -dy;
+    }
+
+    int32_t half = (1 << (FIXED_SHIFT - 1));
+
+    int smooth = 2;
+    int32_t fs2 = fixed(smooth)/2;
+    w += fs2;
+    int32_t s0 = -fs2;
+    int32_t s1 = len + fs2;
+
+    int32_t wdx = ((dx < 0 ? -dx : dx) * w) >> dshift;
+    int32_t sdy = (fs2 * dy) >> dshift;
+    int y0 = fixedfloor(py - wdx - sdy);
+    int y1 = fixedceil(py + ((dy * len) >> dshift) + wdx + sdy);
+
+    int32_t ws = w << dshift;
+    int32_t pxdy = px * dy;
+    int32_t pxdx = px * dx;
+
+    for (int y = y0; y < y1; ++y)
+    {
+        int32_t fy = fixed(y) + half;
+        int32_t fydx = (fy - py) * dx;
+        int32_t fydy = (fy - py) * dy;
+
+        int32_t x0, x1;
+
+        if (dy > 0)
+        {
+            x0 = (fydx - ws) / dy;
+            x1 = (fydx + ws) / dy;
+
+            if (dx != 0)
+            {
+                int32_t x2 = ((s0 << dshift) - fydy) / dx;
+                int32_t x3 = ((s1 << dshift) - fydy) / dx;
+                if (x2 > x3) swapi(&x2, &x3);
+                if (x2 > x0) x0 = x2;
+                if (x3 < x1) x1 = x3;
+            }
+        }
+        else
+        {
+            x0 = s0;
+            x1 = s1;
+        }
+
+        uint8_t *line = gbitmap_get_data_row_info(bmp, (unsigned)y).data;
+        int ix0 = fixedfloor(x0 + px);
+        int ix1 = fixedfloor(x1 + px);
+        int32_t d0s = fydx + pxdy - (fixed(ix0) + half) * dy;
+        int32_t d1s = (fixed(ix0) + half) * dx - pxdx + fydy;
+        int32_t dys = dy << FIXED_SHIFT;
+        int32_t dxs = dx << FIXED_SHIFT;
+
+        for (int x = ix0; x < ix1; ++x)
+        {
+            int32_t d0 = d0s >> dshift;
+            int32_t d1 = d1s >> dshift;
+            d0s -= dys;
+            d1s += dxs;
+            int32_t d = mini(d0 < 0 ? w + d0 : w - d0,
+                             d1 < fs2 ? d1 - s0 : s1 - d1);
+
+            // int a = (d * 4 / smooth) >> FIXED_SHIFT;
+            int a = d >> (FIXED_SHIFT - 1);
+            if (a <= 0) continue;
+            if (a >= 3) line[x] = 0xFF;
+            else
+            {
+                uint8_t c = 0xC0 | a | (a << 2) | (a << 4);
+                if (c > line[x]) line[x] = c;
+            }
+        }
+    }
+}
+
 void draw_rect(struct GBitmap *bmp, uint8_t color, int32_t px, int32_t py,
                       int32_t dx, int32_t dy, int32_t len, int32_t w)
 {

@@ -79,10 +79,10 @@ static void draw_marker(GBitmap *bmp, int cx, int cy, int a, int r, int s)
     int32_t cosa = cos_lookup(a);
     int32_t px = cx + sina * s / TRIG_MAX_RATIO;
     int32_t py = cy - cosa * s / TRIG_MAX_RATIO;
-    int32_t dx = -sina * r / TRIG_MAX_RATIO;
-    int32_t dy = cosa * r / TRIG_MAX_RATIO;
+    int32_t dx = -sina * fixed(256) / TRIG_MAX_RATIO;
+    int32_t dy = cosa * fixed(256) / TRIG_MAX_RATIO;
 
-    draw_rect(bmp, 0xFF, px, py, dx, dy, r, g.marker.w);
+    draw_white_rect(bmp, px, py, dx, dy, r, g.marker.w);
 }
 
 static inline int absi(int i)
@@ -136,8 +136,8 @@ static void redraw(struct Layer *layer, GContext *ctx)
         int32_t a = ((g.hour * 60 + g.min) * TRIG_MAX_ANGLE) / 720;
         int32_t sina = sin_lookup(a);
         int32_t cosa = cos_lookup(a);
-        hour.dx = sina;
-        hour.dy = -cosa;
+        hour.dx = sina * fixed(256) / TRIG_MAX_RATIO;
+        hour.dy = -cosa * fixed(256) / TRIG_MAX_RATIO;
     }
 
     // minute
@@ -146,8 +146,8 @@ static void redraw(struct Layer *layer, GContext *ctx)
         int32_t a = (g.min * TRIG_MAX_ANGLE) / 60;
         int32_t sina = sin_lookup(a);
         int32_t cosa = cos_lookup(a);
-        min.dx = sina;
-        min.dy = -cosa;
+        min.dx = sina * fixed(256) / TRIG_MAX_RATIO;
+        min.dy = -cosa * fixed(256) / TRIG_MAX_RATIO;
     }
 
     // day
@@ -188,10 +188,6 @@ static void redraw(struct Layer *layer, GContext *ctx)
         if (a != b) draw_marker(bmp, cx, cy, b, r, s);
     }
 
-    hour.dx = hour.dx * hour.r / TRIG_MAX_RATIO;
-    hour.dy = hour.dy * hour.r / TRIG_MAX_RATIO;
-    min.dx = min.dx * min.r / TRIG_MAX_RATIO;
-    min.dy = min.dy * min.r / TRIG_MAX_RATIO;
 
     if (g.shadow.enable)
     {
@@ -203,10 +199,10 @@ static void redraw(struct Layer *layer, GContext *ctx)
                   min.dx, min.dy, min.r, fixed(4));
     }
 
-    draw_rect(bmp, 0xFF, cx - hour.dx / 8, cy - hour.dy / 8,
-              hour.dx, hour.dy, hour.r, fixed(4));
-    draw_rect(bmp, 0xFF, cx - min.dx / 8, cy - min.dy / 8,
-              min.dx, min.dy, min.r, fixed(4));
+    draw_white_rect(bmp, cx - hour.dx / 32768, cy - hour.dy / 32768,
+                    hour.dx, hour.dy, hour.r, fixed(4));
+    draw_white_rect(bmp, cx - min.dx / 32768, cy - min.dy / 32768,
+                    min.dx, min.dy, min.r, fixed(4));
 
     draw_circle(bmp, 0xFF, cx, cy, fixed(7));
 
