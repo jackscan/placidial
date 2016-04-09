@@ -136,8 +136,8 @@ static void redraw(struct Layer *layer, GContext *ctx)
         int32_t a = ((g.hour * 60 + g.min) * TRIG_MAX_ANGLE) / 720;
         int32_t sina = sin_lookup(a);
         int32_t cosa = cos_lookup(a);
-        hour.dx = sina * hour.r / TRIG_MAX_RATIO;
-        hour.dy = -cosa * hour.r / TRIG_MAX_RATIO;
+        hour.dx = sina;
+        hour.dy = -cosa;
     }
 
     // minute
@@ -146,21 +146,32 @@ static void redraw(struct Layer *layer, GContext *ctx)
         int32_t a = (g.min * TRIG_MAX_ANGLE) / 60;
         int32_t sina = sin_lookup(a);
         int32_t cosa = cos_lookup(a);
-        min.dx = sina * min.r / TRIG_MAX_RATIO;
-        min.dy = -cosa * min.r / TRIG_MAX_RATIO;
+        min.dx = sina;
+        min.dy = -cosa;
     }
 
     // day
     {
         int r = (mr >> FIXED_SHIFT) * 9 / 16;
-        int dx = 0, dy = 0;
 
-        if (hour.dx < absi(hour.dy) && min.dx < absi(min.dy))
-            dx = r;
-        else if (hour.dx > -absi(hour.dy) && min.dx > -absi(min.dy))
-            dx = -r;
+        int dx = -(hour.dx + min.dx) / 2;
+        int dy = -(hour.dy + min.dy) / 2;
+        if (dx == 0 && dy == 0)
+        {
+            dx = hour.dy;
+            dy = -hour.dx;
+        }
+
+        if (absi(dx) > absi(dy))
+        {
+            dx = dx > 0 ? r : -r;
+            dy = 0;
+        }
         else
-            dy = -r;
+        {
+            dx = 0;
+            dy = dy > 0 ? r : -r;
+        }
 
         draw_day(bmp, w2 + dx, h2 + dy);
     }
@@ -176,6 +187,11 @@ static void redraw(struct Layer *layer, GContext *ctx)
         draw_marker(bmp, cx, cy, a, r, s);
         if (a != b) draw_marker(bmp, cx, cy, b, r, s);
     }
+
+    hour.dx = hour.dx * hour.r / TRIG_MAX_RATIO;
+    hour.dy = hour.dy * hour.r / TRIG_MAX_RATIO;
+    min.dx = min.dx * min.r / TRIG_MAX_RATIO;
+    min.dy = min.dy * min.r / TRIG_MAX_RATIO;
 
     if (g.shadow.enable)
     {
