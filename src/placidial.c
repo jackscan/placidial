@@ -29,7 +29,16 @@ struct
     Window *window;
     uint8_t bgcol;
     int hour, min, sec;
-    int wday, mday;
+
+    int num_scanlines;
+    struct scanline *scanlines;
+
+    struct {
+        int ofweek, ofmonth;
+        int px, py;
+        bool update;
+    } day;
+
     struct {
         int32_t dx, dy;
         bool enable;
@@ -48,13 +57,13 @@ static void draw_week(GBitmap *bmp, int x, int y)
 
     for (int i = 0; i < 4; ++i)
     {
-        uint8_t color = i == g.wday ? 0xF0 : i == 0 ? 0xDB : 0xFF;
+        uint8_t color = i == g.day.ofweek ? 0xF0 : i == 0 ? 0xDB : 0xFF;
         draw_box(bmp, color, x + i * dx, y, w, w);
     }
 
     for (int i = 1; i < 4; ++i)
     {
-        uint8_t color = i + 3 == g.wday ? 0xF0 : 0xFF;
+        uint8_t color = i + 3 == g.day.ofweek ? 0xF0 : 0xFF;
         draw_box(bmp, color, x + i * dx, y + dy, w, w);
     }
 }
@@ -67,10 +76,27 @@ static void draw_day(GBitmap *bmp, int x, int y)
 
     draw_week(bmp, x0, y + my);
 
-    int d10 = g.mday / 10;
-    int d01 = g.mday - d10 * 10;
+    int d10 = g.day.ofmonth / 10;
+    int d01 = g.day.ofmonth - d10 * 10;
     draw_digit(bmp, x0, y - DIGIT_HEIGHT - my, d10);
     draw_digit(bmp, x1, y - DIGIT_HEIGHT - my, d01);
+}
+
+static void clear_day(GBitmap *bmp, int px, int py)
+{
+    int my = 2;
+    int iy0 = py - DIGIT_HEIGHT - my;
+    int iy1 = py + 11 + my;
+    int ix0 = (px - DIGIT_WIDTH) >> 2;
+    int ix1 = ix0 + ((2 * DIGIT_WIDTH + 4) >> 2);
+
+    for (int y = iy0; y < iy1; ++y)
+    {
+        GBitmapDataRowInfo row = gbitmap_get_data_row_info(bmp, y);
+        uint32_t *line = (uint32_t *)row.data;
+        for (int x = ix0; x < ix1; ++x)
+            line[x] = 0;
+    }
 }
 
 static void draw_marker(GBitmap *bmp, int cx, int cy, int a, int r, int s)
@@ -82,7 +108,7 @@ static void draw_marker(GBitmap *bmp, int cx, int cy, int a, int r, int s)
     int32_t dx = -sina * fixed(256) / TRIG_MAX_RATIO;
     int32_t dy = cosa * fixed(256) / TRIG_MAX_RATIO;
 
-    draw_white_rect(bmp, px, py, dx, dy, r, g.marker.w);
+    draw_white_rect(bmp, g.scanlines, px, py, dx, dy, r, g.marker.w);
 }
 
 static inline int absi(int i)
@@ -106,8 +132,6 @@ static void redraw(struct Layer *layer, GContext *ctx)
         g.shadow.dy = fixed(-accel.y) / 256;
     }
 
-    APP_LOG(APP_LOG_LEVEL_INFO, "framebuffer");
-
     GRect bounds = gbitmap_get_bounds(bmp);
 
     int16_t w2 = bounds.size.w / 2;
@@ -115,11 +139,37 @@ static void redraw(struct Layer *layer, GContext *ctx)
     // max radius
     int32_t mr = fixed(w2 < h2 ? w2 : h2);
 
-    // clear background
-    for (int y = 0; y < bounds.size.h; ++y)
+    // first clear
+    if (g.scanlines == NULL || g.num_scanlines < bounds.size.h)
     {
-        GBitmapDataRowInfo row = gbitmap_get_data_row_info(bmp, y);
-        memset(row.data + row.min_x, g.bgcol, row.max_x - row.min_x + 1);
+        free(g.scanlines);
+
+        g.num_scanlines = bounds.size.h;
+        g.scanlines = calloc(g.num_scanlines, sizeof(*g.scanlines));
+
+        // clear background
+        for (int y = 0; y < bounds.size.h; ++y)
+        {
+            GBitmapDataRowInfo row = gbitmap_get_data_row_info(bmp, y);
+            memset(row.data + row.min_x, 0, row.max_x - row.min_x + 1);
+            struct scanline *sl = g.scanlines + y;
+            sl->start = bounds.size.w;
+            sl->end = 0;
+        }
+    }
+    else
+    {
+        // clear scanlines
+        for (int y = 0; y < g.num_scanlines; ++y)
+        {
+            struct scanline *sl = g.scanlines + y;
+            GBitmapDataRowInfo row = gbitmap_get_data_row_info(bmp, y);
+            uint32_t *line = (uint32_t *)row.data;
+            for (int x = sl->start; x < sl->end; ++x)
+                line[x] = 0;
+            sl->start = bounds.size.w;
+            sl->end = 0;
+        }
     }
 
     int32_t cx = fixed(w2);
@@ -173,8 +223,20 @@ static void redraw(struct Layer *layer, GContext *ctx)
             dy = dy > 0 ? r : -r;
         }
 
-        draw_day(bmp, w2 + dx, h2 + dy);
+        int px = w2 + dx;
+        int py = h2 + dy;
+
+        if (g.day.update || g.day.px != px || g.day.py != py)
+        {
+            clear_day(bmp, g.day.px, g.day.py);
+            draw_day(bmp, px, py);
+            g.day.px = px;
+            g.day.py = py;
+            g.day.update = false;
+        }
     }
+
+    draw_white_circle(bmp, cx, cy, fixed(7));
 
     // dial marker
     {
@@ -188,23 +250,12 @@ static void redraw(struct Layer *layer, GContext *ctx)
         if (a != b) draw_marker(bmp, cx, cy, b, r, s);
     }
 
-
-    if (g.shadow.enable)
-    {
-        draw_rect(bmp, 0xC0, cx + g.shadow.dx - hour.dx / 8,
-                  cy + g.shadow.dy - hour.dy / 8,
-                  hour.dx, hour.dy, hour.r, fixed(4));
-        draw_rect(bmp, 0xC0, cx + g.shadow.dx - min.dx / 8,
-                  cy + g.shadow.dy - min.dy / 8,
-                  min.dx, min.dy, min.r, fixed(4));
-    }
-
-    draw_white_rect(bmp, cx - hour.dx / 32768, cy - hour.dy / 32768,
+    draw_white_rect(bmp, g.scanlines, cx, cy,
                     hour.dx, hour.dy, hour.r, fixed(4));
-    draw_white_rect(bmp, cx - min.dx / 32768, cy - min.dy / 32768,
+    draw_white_rect(bmp, g.scanlines,
+                    cx - min.dx / fixed(2), cy - min.dy / fixed(2),
                     min.dx, min.dy, min.r, fixed(4));
 
-    draw_circle(bmp, 0xFF, cx, cy, fixed(7));
 
     graphics_release_frame_buffer(ctx, bmp);
 }
@@ -214,8 +265,12 @@ static void tick_handler(struct tm *t, TimeUnits units_changed)
     g.hour = t->tm_hour;
     g.min = t->tm_min;
     g.sec = t->tm_sec;
-    g.wday = t->tm_wday;
-    g.mday = t->tm_mday;
+    if (t->tm_wday != g.day.ofweek || t->tm_mday != g.day.ofmonth)
+    {
+        g.day.ofweek = t->tm_wday;
+        g.day.ofmonth = t->tm_mday;
+        g.day.update = true;
+    }
     layer_mark_dirty(window_get_root_layer(g.window));
 }
 
@@ -224,10 +279,12 @@ static void window_load(Window *window)
     Layer *window_layer = window_get_root_layer(window);
     layer_set_update_proc(window_layer, redraw);
     tick_timer_service_subscribe(MINUTE_UNIT, tick_handler);
+    g.scanlines = NULL;
 }
 
 static void window_unload(Window *window)
 {
+    free(g.scanlines);
 }
 
 static void init()

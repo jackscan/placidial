@@ -98,8 +98,52 @@ void draw_circle(struct GBitmap *bmp, uint8_t color, int32_t cx, int32_t cy,
     }
 }
 
-void draw_white_rect(struct GBitmap *bmp, int32_t px, int32_t py,
-                      int32_t dx, int32_t dy, int32_t len, int32_t w)
+void draw_white_circle(struct GBitmap *bmp, int32_t cx, int32_t cy, int32_t r)
+{
+    int32_t half = (1 << (FIXED_SHIFT - 1));
+    int smooth = 2;
+    int32_t fs2 = fixed(smooth)/2;
+
+    int y0 = fixedfloor(cy - r);
+    int y1 = fixedceil(cy + r);
+    int x0 = fixedfloor(cx - r);
+    int x1 = fixedfloor(cx + r);
+
+    int32_t r0 = r - fs2;
+    int32_t r1 = r + fs2;
+    int32_t r2 = r1 * r1;
+    int32_t rs = r2 - r0 * r0;
+
+    int32_t s = fixed(1024) / rs;
+    r2 *= s;
+
+    for (int y = y0; y < y1; ++y)
+    {
+        int32_t dy = fixed(y) + half - cy;
+        uint8_t *line = gbitmap_get_data_row_info(bmp, (unsigned)y).data;
+        for (int x = x0; x < x1; ++x)
+        {
+            int32_t dx = fixed(x) + half - cx;
+            int32_t ds = dx * dx + dy * dy;
+            int32_t a = (r2 - ds * s) >> (8 + FIXED_SHIFT);
+            if (a <= 0) continue;
+            if (a >= 3) line[x] = 0xFF;
+            else line[x] = 0xC0 | a | (a << 2) | (a << 4);
+        }
+    }
+}
+
+static inline void update_scanline(struct scanline *line, int x0, int x1)
+{
+    int start = x0 >> 2;
+    int end = (x1 + 3) >> 2;
+    if (line->start > start) line->start = start;
+    if (line->end < end) line->end = end;
+}
+
+void draw_white_rect(struct GBitmap *bmp, struct scanline *scanlines,
+                     int32_t px, int32_t py, int32_t dx, int32_t dy,
+                     int32_t len, int32_t w)
 {
     // length of (dx, dy) is assumed to be fixed(256)
     const int dshift = FIXED_SHIFT + 8;
@@ -165,6 +209,8 @@ void draw_white_rect(struct GBitmap *bmp, int32_t px, int32_t py,
         int32_t d1s = (fixed(ix0) + half) * dx - pxdx + fydy;
         int32_t dys = dy << FIXED_SHIFT;
         int32_t dxs = dx << FIXED_SHIFT;
+
+        update_scanline(scanlines + y, ix0, ix1);
 
         for (int x = ix0; x < ix1; ++x)
         {
