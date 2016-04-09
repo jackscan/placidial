@@ -106,6 +106,19 @@ static void draw_marker(GBitmap *bmp, int cx, int cy, int a, int r, int s)
     draw_white_rect(bmp, g.scanlines, px, py, dx, dy, r, g.marker.w);
 }
 
+static void update_time(struct tm *t)
+{
+    g.hour = t->tm_hour;
+    g.min = t->tm_min;
+    g.sec = t->tm_sec;
+    if (t->tm_wday != g.day.ofweek || t->tm_mday != g.day.ofmonth)
+    {
+        g.day.ofweek = t->tm_wday;
+        g.day.ofmonth = t->tm_mday;
+        g.day.update = true;
+    }
+}
+
 static inline int absi(int i)
 {
     return i < 0 ? -i : i;
@@ -118,6 +131,13 @@ static void redraw(struct Layer *layer, GContext *ctx)
     {
         APP_LOG(APP_LOG_LEVEL_ERROR, "failed to capture framebuffer");
         return;
+    }
+
+    // get date and time if unset
+    if (g.day.ofmonth == 0)
+    {
+        time_t t = time(NULL);
+        update_time(localtime(&t));
     }
 
     GRect bounds = gbitmap_get_bounds(bmp);
@@ -250,15 +270,7 @@ static void redraw(struct Layer *layer, GContext *ctx)
 
 static void tick_handler(struct tm *t, TimeUnits units_changed)
 {
-    g.hour = t->tm_hour;
-    g.min = t->tm_min;
-    g.sec = t->tm_sec;
-    if (t->tm_wday != g.day.ofweek || t->tm_mday != g.day.ofmonth)
-    {
-        g.day.ofweek = t->tm_wday;
-        g.day.ofmonth = t->tm_mday;
-        g.day.update = true;
-    }
+    update_time(t);
     layer_mark_dirty(window_get_root_layer(g.window));
 }
 
