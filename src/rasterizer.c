@@ -161,16 +161,20 @@ void draw_white_rect(struct GBitmap *bmp, struct scanline *scanlines,
 
     int smooth = 2;
     int32_t fs2 = fixed(smooth)/2;
+    int32_t wi = w - fs2;
     w += fs2;
     int32_t s0 = -fs2;
     int32_t s1 = len + fs2;
+    int32_t t0 = dx < 0 ? s0 + 2 * fs2 : s0;
+    int32_t t1 = dx < 0 ? s1 : s1 - 2 * fs2;
 
     int32_t wdx = ((dx < 0 ? -dx : dx) * w) >> dshift;
     int32_t sdy = (fs2 * dy) >> dshift;
     int y0 = fixedfloor(py - wdx - sdy);
     int y1 = fixedceil(py + ((dy * len) >> dshift) + wdx + sdy);
 
-    int32_t ws = w << dshift;
+    int32_t ws0 = w << dshift;
+    int32_t ws1 = wi << dshift;
     int32_t pxdy = px * dy;
     int32_t pxdx = px * dx;
 
@@ -180,39 +184,71 @@ void draw_white_rect(struct GBitmap *bmp, struct scanline *scanlines,
         int32_t fydx = (fy - py) * dx;
         int32_t fydy = (fy - py) * dy;
 
-        int32_t x0, x1;
+        int32_t x0, x1, x2;
 
         if (dy > 0)
         {
-            x0 = (fydx - ws) / dy;
-            x1 = (fydx + ws) / dy;
+            x0 = (fydx - ws0) / dy;
+            x1 = (fydx + ws1) / dy;
+            x2 = (fydx + ws0) / dy;
 
             if (dx != 0)
             {
-                int32_t x2 = ((s0 << dshift) - fydy) / dx;
-                int32_t x3 = ((s1 << dshift) - fydy) / dx;
-                if (x2 > x3) swapi(&x2, &x3);
-                if (x2 > x0) x0 = x2;
-                if (x3 < x1) x1 = x3;
+                int32_t x3 = ((t0 << dshift) - fydy) / dx;
+                int32_t x4 = ((t1 << dshift) - fydy) / dx;
+                int32_t x5 =
+                    ((dx < 0 ? s0 << dshift : s1 << dshift) - fydy) / dx;
+                if (x3 > x4) swapi(&x3, &x4);
+                if (x3 > x0) x0 = x3;
+                if (x4 < x1) x1 = x4;
+                if (x5 < x2) x2 = x5;
             }
         }
         else
         {
-            x0 = s0;
-            x1 = s1;
+            x0 = t0;
+            x1 = t1;
+            x2 = s1;
         }
 
         uint8_t *line = gbitmap_get_data_row_info(bmp, (unsigned)y).data;
         int ix0 = fixedfloor(x0 + px);
         int ix1 = fixedfloor(x1 + px);
-        int32_t d0s = fydx + pxdy - (fixed(ix0) + half) * dy;
-        int32_t d1s = (fixed(ix0) + half) * dx - pxdx + fydy;
+        int ix2 = fixedfloor(x2 + px);
         int32_t dys = dy << FIXED_SHIFT;
         int32_t dxs = dx << FIXED_SHIFT;
 
-        update_scanline(scanlines + y, ix0, ix1);
+        update_scanline(scanlines + y, ix0, ix2);
 
-        for (int x = ix0; x < ix1; ++x)
+        int32_t d0s = fydx + pxdy - (fixed(ix0) + half) * dy;
+        int32_t d1s = (fixed(ix0) + half) * dx - pxdx + fydy;
+        int x;
+        for (x = ix0; x < ix1; ++x)
+        {
+            int32_t d0 = d0s >> dshift;
+            int32_t d1 = d1s >> dshift;
+            d0s -= dys;
+            d1s += dxs;
+            int32_t d = mini(d0 < 0 ? w + d0 : w - d0,
+                             d1 < fs2 ? d1 - s0 : s1 - d1);
+
+            // int a = (d * 4 / smooth) >> FIXED_SHIFT;
+            int a = d >> (FIXED_SHIFT - 1);
+            if (a <= 0) continue;
+            if (a >= 3) break;
+            else
+            {
+                uint8_t c = 0xC0 | a | (a << 2) | (a << 4);
+                if (c > line[x]) line[x] = c;
+            }
+        }
+
+        for (; x < ix1; ++x)
+            line[x] = 0xFF;
+
+        d0s = fydx + pxdy - (fixed(x) + half) * dy;
+        d1s = (fixed(x) + half) * dx - pxdx + fydy;
+        for (; x < ix2; ++x)
         {
             int32_t d0 = d0s >> dshift;
             int32_t d1 = d1s >> dshift;
