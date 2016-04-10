@@ -30,14 +30,23 @@ struct
     uint8_t bgcol;
     int hour, min, sec;
 
+    int showsec;
+
     int num_scanlines;
     struct scanline *scanlines;
+
+    int32_t center;
+    int32_t seccenter;
 
     struct {
         int ofweek, ofmonth;
         int px, py;
         bool update;
     } day;
+
+    struct {
+        int32_t w, r0, r1;
+    } hour_hand, min_hand, sec_hand;
 
     struct {
         int32_t w, h;
@@ -104,6 +113,18 @@ static void draw_marker(GBitmap *bmp, int cx, int cy, int a, int r, int s)
     int32_t dy = cosa * fixed(256) / TRIG_MAX_RATIO;
 
     draw_white_rect(bmp, g.scanlines, px, py, dx, dy, r, g.marker.w);
+}
+
+static void draw_red_marker(GBitmap *bmp, int cx, int cy, int a, int r, int s)
+{
+    int32_t sina = sin_lookup(a);
+    int32_t cosa = cos_lookup(a);
+    int32_t px = cx + sina * s / TRIG_MAX_RATIO;
+    int32_t py = cy - cosa * s / TRIG_MAX_RATIO;
+    int32_t dx = -sina * fixed(256) / TRIG_MAX_RATIO;
+    int32_t dy = cosa * fixed(256) / TRIG_MAX_RATIO;
+
+    draw_rect(bmp, g.scanlines, 0xF0, px, py, dx, dy, r, g.marker.w);
 }
 
 static void update_time(struct tm *t)
@@ -185,12 +206,11 @@ static void redraw(struct Layer *layer, GContext *ctx)
 
     struct
     {
-        int32_t dx, dy, r;
-    } hour, min;
+        int32_t dx, dy;
+    } hour, min, sec = { 0 };
 
     // hour
     {
-        hour.r = mr * 5 / 8;
         int32_t a = ((g.hour * 60 + g.min) * TRIG_MAX_ANGLE) / 720;
         int32_t sina = sin_lookup(a);
         int32_t cosa = cos_lookup(a);
@@ -200,12 +220,21 @@ static void redraw(struct Layer *layer, GContext *ctx)
 
     // minute
     {
-        min.r = mr * 7 / 8;
         int32_t a = (g.min * TRIG_MAX_ANGLE) / 60;
         int32_t sina = sin_lookup(a);
         int32_t cosa = cos_lookup(a);
         min.dx = sina * fixed(256) / TRIG_MAX_RATIO;
         min.dy = -cosa * fixed(256) / TRIG_MAX_RATIO;
+    }
+
+    // second
+    if (g.showsec)
+    {
+        int32_t a = (g.sec * TRIG_MAX_ANGLE) / 60;
+        int32_t sina = sin_lookup(a);
+        int32_t cosa = cos_lookup(a);
+        sec.dx = sina * fixed(256) / TRIG_MAX_RATIO;
+        sec.dy = -cosa * fixed(256) / TRIG_MAX_RATIO;
     }
 
     // day
@@ -234,35 +263,69 @@ static void redraw(struct Layer *layer, GContext *ctx)
         int px = w2 + dx;
         int py = h2 + dy;
 
-        if (g.day.update || g.day.px != px || g.day.py != py)
+        if (g.day.px != px || g.day.py != py)
         {
-            clear_day(bmp, g.day.px, g.day.py);
+            if (g.day.px || g.day.py)
+                clear_day(bmp, g.day.px, g.day.py);
             draw_day(bmp, px, py);
             g.day.px = px;
             g.day.py = py;
-            g.day.update = false;
         }
+        else if (g.day.update || g.showsec)
+            draw_day(bmp, g.day.px, g.day.py);
+
+        g.day.update = false;
     }
 
-    draw_white_circle(bmp, cx, cy, fixed(7));
+    draw_white_circle(bmp, cx, cy, g.center);
 
     // dial marker
     {
         int32_t s = mr * 15 / 16;
         int32_t r = g.marker.h;
 
-        int32_t a = (g.min + 2) * 12 / 60 * TRIG_MAX_ANGLE / 12;
-        int32_t b = (g.hour * 60 + g.min + 30) * 12 / 720 * TRIG_MAX_ANGLE / 12;
+        int32_t c =
+            g.showsec ? (g.sec + 2) * 12 / 60 * TRIG_MAX_ANGLE / 12 : -1;
+        int32_t a = ((g.min + 2) % 60) * 12 / 60 * TRIG_MAX_ANGLE / 12;
+        int32_t b =
+            ((g.hour * 60 + g.min + 30) % 720) * 12 / 720 * TRIG_MAX_ANGLE / 12;
 
         draw_marker(bmp, cx, cy, a, r, s);
-        if (a != b) draw_marker(bmp, cx, cy, b, r, s);
+        if (b != a) draw_marker(bmp, cx, cy, b, r, s);
+        if (c >= 0 && c != a && c != b) draw_red_marker(bmp, cx, cy, c, r, s);
     }
 
-    draw_white_rect(bmp, g.scanlines, cx, cy,
-                    hour.dx, hour.dy, hour.r, fixed(4));
-    draw_white_rect(bmp, g.scanlines,
-                    cx - min.dx / fixed(2), cy - min.dy / fixed(2),
-                    min.dx, min.dy, min.r, fixed(4));
+    // draw hour hand
+    {
+        int32_t px = cx - hour.dx * mr * g.hour_hand.r0 / (fixed(256) * 256);
+        int32_t py = cy - hour.dy * mr * g.hour_hand.r0 / (fixed(256) * 256);
+        int32_t len = mr * (g.hour_hand.r1 + g.hour_hand.r0) / 256;
+        draw_white_rect(bmp, g.scanlines, px, py,
+                        hour.dx, hour.dy, len, g.hour_hand.w / 2);
+    }
+
+    // draw minute hand
+    {
+        int32_t px = cx - min.dx * mr * g.min_hand.r0 / (fixed(256) * 256);
+        int32_t py = cy - min.dy * mr * g.min_hand.r0 / (fixed(256) * 256);
+        int32_t len = mr * (g.min_hand.r1 + g.min_hand.r0) / 256;
+        draw_white_rect(bmp, g.scanlines, px, py,
+                        min.dx, min.dy, len, g.min_hand.w / 2);
+    }
+
+    if (g.showsec)
+    {
+        // draw_rect(bmp, g.scanlines, 0xC0,
+        //       cx - sec.dx / fixed(1), cy - sec.dy / fixed(1),
+        //       sec.dx, sec.dy, sec.r, fixed(2));
+        int32_t px = cx - sec.dx * mr * g.sec_hand.r0 / (fixed(256) * 256);
+        int32_t py = cy - sec.dy * mr * g.sec_hand.r0 / (fixed(256) * 256);
+        int32_t len = mr * (g.sec_hand.r1 + g.sec_hand.r0) / 256;
+        draw_rect(bmp, g.scanlines, 0xF0,
+                  px, py, sec.dx, sec.dy, len, g.sec_hand.w / 2);
+        draw_circle(bmp, 0xC0, cx, cy, g.seccenter + fixed(1) / 2);
+        draw_circle(bmp, 0xF0, cx, cy, g.seccenter);
+    }
 
 
     graphics_release_frame_buffer(ctx, bmp);
@@ -270,6 +333,8 @@ static void redraw(struct Layer *layer, GContext *ctx)
 
 static void tick_handler(struct tm *t, TimeUnits units_changed)
 {
+    if (g.showsec > 0 && --g.showsec == 0)
+        tick_timer_service_subscribe(MINUTE_UNIT, tick_handler);
     update_time(t);
     layer_mark_dirty(window_get_root_layer(g.window));
 }
@@ -278,7 +343,8 @@ static void window_load(Window *window)
 {
     Layer *window_layer = window_get_root_layer(window);
     layer_set_update_proc(window_layer, redraw);
-    tick_timer_service_subscribe(MINUTE_UNIT, tick_handler);
+    tick_timer_service_subscribe(g.showsec ? SECOND_UNIT : MINUTE_UNIT,
+                                 tick_handler);
     g.scanlines = NULL;
 }
 
@@ -289,8 +355,21 @@ static void window_unload(Window *window)
 
 static void init()
 {
+    // g.showsec = -1;
+    g.sec_hand.w = fixed(3);
+    g.sec_hand.r0 = 40;
+    g.sec_hand.r1 = 210;
+    g.min_hand.w = fixed(8);
+    g.min_hand.r0 = 25;
+    g.min_hand.r1 = 210;
+    g.hour_hand.r0 = 8;
+    g.hour_hand.r1 = 160;
+    g.hour_hand.w = fixed(8);
     g.marker.w = fixed(2);
     g.marker.h = fixed(5);
+    g.center = fixed(7);
+    g.seccenter = fixed(4);
+
     g.window = window_create();
     window_set_window_handlers(g.window,
                                (WindowHandlers){
