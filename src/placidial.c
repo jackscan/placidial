@@ -285,7 +285,7 @@ static void redraw(struct Layer *layer, GContext *ctx)
         int32_t r = g.marker.h;
 
         int32_t c =
-            g.showsec ? (g.sec + 2) * 12 / 60 * TRIG_MAX_ANGLE / 12 : -1;
+            g.showsec ? ((g.sec + 2) % 60) * 12 / 60 * TRIG_MAX_ANGLE / 12 : -1;
         int32_t a = ((g.min + 2) % 60) * 12 / 60 * TRIG_MAX_ANGLE / 12;
         int32_t b =
             ((g.hour * 60 + g.min + 30) % 720) * 12 / 720 * TRIG_MAX_ANGLE / 12;
