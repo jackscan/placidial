@@ -6,12 +6,14 @@
   "versionLabel": "1.0",
   "sdkVersion": "3",
   "targetPlatforms": ["basalt", "chalk"],
+  "capabilities": [ "configurable" ],
   "enableMultiJS": true,
   "watchapp": {
     "watchface": true
   },
   "appKeys": {
-    "dummy": 0
+    "showsec": 0,
+    "showday": 1
   },
   "resources": {
     "media": []

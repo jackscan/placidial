@@ -24,6 +24,12 @@
 
 #include <pebble.h>
 
+enum
+{
+    SHOWSEC_KEY,
+    SHOWDAY_KEY,
+};
+
 struct
 {
     Window *window;
@@ -42,6 +48,7 @@ struct
         int ofweek, ofmonth;
         int px, py;
         bool update;
+        bool show;
     } day;
 
     struct {
@@ -238,6 +245,7 @@ static void redraw(struct Layer *layer, GContext *ctx)
     }
 
     // day
+    if (g.day.show)
     {
         int r = (mr >> FIXED_SHIFT) * 9 / 16;
 
@@ -276,6 +284,8 @@ static void redraw(struct Layer *layer, GContext *ctx)
 
         g.day.update = false;
     }
+    else if (g.day.update && (g.day.px || g.day.py))
+        clear_day(bmp, g.day.px, g.day.py);
 
     draw_white_circle(bmp, cx, cy, g.center);
 
@@ -339,6 +349,48 @@ static void tick_handler(struct tm *t, TimeUnits units_changed)
     layer_mark_dirty(window_get_root_layer(g.window));
 }
 
+static void read_settings(void)
+{
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "reading settings");
+    if (persist_exists(SHOWSEC_KEY))
+    {
+        g.showsec = persist_read_bool(SHOWSEC_KEY) ? -1 : 0;
+        APP_LOG(APP_LOG_LEVEL_DEBUG, "showsec: %i", g.showsec != 0);
+    }
+    if (persist_exists(SHOWDAY_KEY))
+    {
+        g.day.show = persist_read_bool(SHOWDAY_KEY);
+        APP_LOG(APP_LOG_LEVEL_DEBUG, "day.show: %i", g.day.show);
+    }
+}
+
+static void save_settings(void)
+{
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "saving settings");
+    persist_write_bool(SHOWSEC_KEY, g.showsec != 0);
+    persist_write_bool(SHOWDAY_KEY, g.day.show);
+}
+
+static void message_received(DictionaryIterator *iter, void *context)
+{
+    Tuple *t;
+    if ((t = dict_find(iter, SHOWSEC_KEY))) {
+        APP_LOG(APP_LOG_LEVEL_DEBUG, "showsec: %d", (int)t->value->int32);
+        g.showsec = t->value->int32 != 0 ? -1 : 0;
+        tick_timer_service_subscribe(g.showsec ? SECOND_UNIT : MINUTE_UNIT,
+                                     tick_handler);
+    }
+    if ((t = dict_find(iter, SHOWDAY_KEY))) {
+        APP_LOG(APP_LOG_LEVEL_DEBUG, "showday: %d", (int)t->value->int32);
+        g.day.show = t->value->int32 != 0;
+        g.day.update = true;
+    }
+
+    save_settings();
+
+    layer_mark_dirty(window_get_root_layer(g.window));
+}
+
 static void window_load(Window *window)
 {
     Layer *window_layer = window_get_root_layer(window);
@@ -355,7 +407,11 @@ static void window_unload(Window *window)
 
 static void init()
 {
-    // g.showsec = -1;
+    app_message_register_inbox_received(message_received);
+    app_message_open(64, 64);
+
+    g.showsec = 0;
+    g.day.show = true;
     g.sec_hand.w = fixed(3);
     g.sec_hand.r0 = 40;
     g.sec_hand.r1 = 210;
@@ -369,6 +425,8 @@ static void init()
     g.marker.h = fixed(5);
     g.center = fixed(7);
     g.seccenter = fixed(4);
+
+    read_settings();
 
     g.window = window_create();
     window_set_window_handlers(g.window,
