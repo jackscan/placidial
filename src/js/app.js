@@ -81,7 +81,7 @@ Pebble.addEventListener('showConfiguration', function(e) {
         }
         console.log("query: " + query);
     }
-    Pebble.openURL("https://jackscan.github.io/index.html" + query);
+    Pebble.openURL("https://jackscan.github.io/placidial/config.html" + query);
 });
 
 Pebble.addEventListener('webviewclosed', function(e) {
