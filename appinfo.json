@@ -14,7 +14,8 @@
   "appKeys": {
     "showsec": 0,
     "showday": 1,
-    "outline": 2
+    "outline": 2,
+    "bgcol": 3
   },
   "resources": {
     "media": []

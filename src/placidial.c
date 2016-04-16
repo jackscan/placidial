@@ -29,6 +29,7 @@ enum
     SHOWSEC_KEY,
     SHOWDAY_KEY,
     OUTLINE_KEY,
+    BGCOL_KEY,
 };
 
 struct
@@ -103,13 +104,15 @@ static void clear_day(GBitmap *bmp, int px, int py)
     int iy1 = py + 11 + my;
     int ix0 = (px - DIGIT_WIDTH) >> 2;
     int ix1 = ix0 + ((2 * DIGIT_WIDTH + 4) >> 2);
+    uint32_t col4 =
+        (g.bgcol << 24) | (g.bgcol << 16) | (g.bgcol << 8) | g.bgcol;
 
     for (int y = iy0; y < iy1; ++y)
     {
         GBitmapDataRowInfo row = gbitmap_get_data_row_info(bmp, y);
         uint32_t *line = (uint32_t *)row.data;
         for (int x = ix0; x < ix1; ++x)
-            line[x] = 0;
+            line[x] = col4;
     }
 }
 
@@ -190,7 +193,7 @@ static void redraw(struct Layer *layer, GContext *ctx)
         for (int y = 0; y < bounds.size.h; ++y)
         {
             GBitmapDataRowInfo row = gbitmap_get_data_row_info(bmp, y);
-            memset(row.data + row.min_x, 0, row.max_x - row.min_x + 1);
+            memset(row.data + row.min_x, g.bgcol, row.max_x - row.min_x + 1);
             struct scanline *sl = g.scanlines + y;
             sl->start = bounds.size.w;
             sl->end = 0;
@@ -199,13 +202,15 @@ static void redraw(struct Layer *layer, GContext *ctx)
     else
     {
         // clear scanlines
+        uint32_t col4 =
+            (g.bgcol << 24) | (g.bgcol << 16) | (g.bgcol << 8) | g.bgcol;
         for (int y = 0; y < g.num_scanlines; ++y)
         {
             struct scanline *sl = g.scanlines + y;
             GBitmapDataRowInfo row = gbitmap_get_data_row_info(bmp, y);
             uint32_t *line = (uint32_t *)row.data;
             for (int x = sl->start; x < sl->end; ++x)
-                line[x] = 0;
+                line[x] = col4;
             sl->start = bounds.size.w;
             sl->end = 0;
         }
@@ -374,6 +379,11 @@ static void read_settings(void)
         g.outline = persist_read_bool(OUTLINE_KEY);
         APP_LOG(APP_LOG_LEVEL_DEBUG, "outline: %i", g.outline);
     }
+    if (persist_exists(BGCOL_KEY))
+    {
+        g.bgcol = (uint8_t)persist_read_int(BGCOL_KEY);
+        APP_LOG(APP_LOG_LEVEL_DEBUG, "bgcol: 0x%x", g.bgcol);
+    }
 }
 
 static void save_settings(void)
@@ -382,6 +392,7 @@ static void save_settings(void)
     persist_write_bool(SHOWSEC_KEY, g.showsec != 0);
     persist_write_bool(SHOWDAY_KEY, g.day.show);
     persist_write_bool(OUTLINE_KEY, g.outline);
+    persist_write_int(BGCOL_KEY, (int)(unsigned)g.bgcol);
 }
 
 static void message_received(DictionaryIterator *iter, void *context)
@@ -401,6 +412,12 @@ static void message_received(DictionaryIterator *iter, void *context)
     if ((t = dict_find(iter, OUTLINE_KEY))) {
         APP_LOG(APP_LOG_LEVEL_DEBUG, "outline: %d", (int)t->value->int32);
         g.outline = t->value->int32 != 0;
+    }
+    if ((t = dict_find(iter, BGCOL_KEY))) {
+        APP_LOG(APP_LOG_LEVEL_DEBUG, "bgcol: 0x%x", (int)t->value->uint8);
+        g.bgcol = t->value->uint8;
+        free(g.scanlines);
+        g.scanlines = NULL;
     }
 
     save_settings();
@@ -427,6 +444,7 @@ static void init()
     app_message_register_inbox_received(message_received);
     app_message_open(64, 64);
 
+    g.bgcol = 0xC0;
     g.outline = true;
     g.showsec = 0;
     g.day.show = true;
