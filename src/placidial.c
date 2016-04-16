@@ -33,6 +33,7 @@ enum
     HOUR_KEY,
     MIN_KEY,
     SEC_KEY,
+    NUM_KEYS
 };
 
 struct
@@ -486,7 +487,9 @@ static void window_unload(Window *window)
 static void init()
 {
     app_message_register_inbox_received(message_received);
-    app_message_open(64, 64);
+    // needed inbox size, see note at dict_calc_buffer_size
+    uint32_t insize = NUM_KEYS * (7 + sizeof(int32_t)) + 1;
+    app_message_open(insize, 0);
 
     g.bgcol = 0xC0;
     g.outline = true;
