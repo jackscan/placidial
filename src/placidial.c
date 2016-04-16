@@ -413,6 +413,11 @@ static void save_settings(void)
     persist_write_data(SEC_KEY, &g.sec_hand, sizeof(g.sec_hand));
 }
 
+static inline int32_t clamp(int32_t val, int32_t max)
+{
+    return val < max ? val : max;
+}
+
 static void message_received(DictionaryIterator *iter, void *context)
 {
     Tuple *t;
@@ -439,22 +444,22 @@ static void message_received(DictionaryIterator *iter, void *context)
     }
     if ((t = dict_find(iter, HOUR_KEY))) {
         APP_LOG(APP_LOG_LEVEL_DEBUG, "hour: 0x%x", (int)t->value->uint32);
-        g.hour_hand.r0 = t->value->int32 & 0xFF;
-        g.hour_hand.r1 = (t->value->int32 >> 8) & 0xFF;
+        g.hour_hand.r0 = clamp(t->value->int32 & 0xFF, 230);
+        g.hour_hand.r1 = clamp((t->value->int32 >> 8) & 0xFF, 230);
         g.hour_hand.w = (t->value->int32 >> 16) & 0xFF;
         g.hour_hand.col = (t->value->uint32 >> 24) & 0xFF;
     }
     if ((t = dict_find(iter, MIN_KEY))) {
         APP_LOG(APP_LOG_LEVEL_DEBUG, "min: 0x%x", (int)t->value->uint32);
-        g.min_hand.r0 = t->value->int32 & 0xFF;
-        g.min_hand.r1 = (t->value->int32 >> 8) & 0xFF;
+        g.min_hand.r0 = clamp(t->value->int32 & 0xFF, 230);
+        g.min_hand.r1 = clamp((t->value->int32 >> 8) & 0xFF, 230);
         g.min_hand.w = (t->value->int32 >> 16) & 0xFF;
         g.min_hand.col = (t->value->uint32 >> 24) & 0xFF;
     }
     if ((t = dict_find(iter, SEC_KEY))) {
         APP_LOG(APP_LOG_LEVEL_DEBUG, "sec: 0x%x", (int)t->value->uint32);
-        g.sec_hand.r0 = t->value->int32 & 0xFF;
-        g.sec_hand.r1 = (t->value->int32 >> 8) & 0xFF;
+        g.sec_hand.r0 = clamp(t->value->int32 & 0xFF, 230);
+        g.sec_hand.r1 = clamp((t->value->int32 >> 8) & 0xFF, 230);
         g.sec_hand.w = (t->value->int32 >> 16) & 0xFF;
         g.sec_hand.col = (t->value->uint32 >> 24) & 0xFF;
     }
