@@ -33,6 +33,7 @@ enum
     HOUR_KEY,
     MIN_KEY,
     SEC_KEY,
+    CENTER_KEY,
     NUM_KEYS
 };
 
@@ -47,8 +48,10 @@ struct
     int num_scanlines;
     struct scanline *scanlines;
 
-    int32_t center;
-    int32_t seccenter;
+    struct {
+        int32_t r;
+        uint8_t col;
+    } center[2];
 
     bool outline;
 
@@ -209,13 +212,13 @@ static void redraw(struct Layer *layer, GContext *ctx)
             sl->end = 0;
         }
     }
-
-    int r = (g.center + 0xf) >> FIXED_SHIFT;
-    for (int y = h2 - r - 2; y < h2 + r + 2; ++y)
+    int fr = g.center[0].r > g.center[1].r ? g.center[0].r : g.center[1].r;
+    int r = (fr + 0xf) >> FIXED_SHIFT;
+    for (int y = h2 - r - 1; y < h2 + r + 1; ++y)
     {
         struct scanline *sl = g.scanlines + y;
-        sl->start = (w2 - r - 2) >> 2;
-        sl->end = (w2 + r + 2 + 3) >> 2;
+        sl->start = (w2 - r - 1) >> 2;
+        sl->end = (w2 + r + 1 + 3) >> 2;
     }
 
     int32_t cx = fixed(w2);
@@ -332,7 +335,7 @@ static void redraw(struct Layer *layer, GContext *ctx)
                            min.dx, min.dy, len, g.min_hand.w / 2, g.outline);
     }
 
-    draw_circle(bmp, 0xFF, cx, cy, g.center, g.outline);
+    draw_circle(bmp, g.center[0].col, cx, cy, g.center[0].r, g.outline);
 
     if (g.showsec)
     {
@@ -341,7 +344,7 @@ static void redraw(struct Layer *layer, GContext *ctx)
         int32_t len = mr * (g.sec_hand.r1 + g.sec_hand.r0) / 256;
         draw_rect(bmp, g.scanlines, g.sec_hand.col,
                   px, py, sec.dx, sec.dy, len, g.sec_hand.w / 2, g.outline);
-        draw_circle(bmp, 0xF0, cx, cy, g.seccenter, g.outline);
+        draw_circle(bmp, g.center[1].col, cx, cy, g.center[1].r, g.outline);
     }
 
 
@@ -400,6 +403,13 @@ static void read_settings(void)
                 (int)g.sec_hand.r0, (int)g.sec_hand.r1,
                 (int)g.sec_hand.w, g.sec_hand.col);
     }
+    if (persist_exists(CENTER_KEY))
+    {
+        persist_read_data(CENTER_KEY, &g.center, sizeof(g.center));
+        APP_LOG(APP_LOG_LEVEL_DEBUG, "center: %d, 0x%x, %d, 0x%x",
+                (int)g.center[0].r, g.center[0].col,
+                (int)g.center[1].r, g.center[1].col);
+    }
 }
 
 static void save_settings(void)
@@ -412,6 +422,7 @@ static void save_settings(void)
     persist_write_data(HOUR_KEY, &g.hour_hand, sizeof(g.hour_hand));
     persist_write_data(MIN_KEY, &g.min_hand, sizeof(g.min_hand));
     persist_write_data(SEC_KEY, &g.sec_hand, sizeof(g.sec_hand));
+    persist_write_data(CENTER_KEY, &g.center, sizeof(g.center));
 }
 
 static inline int32_t clamp(int32_t val, int32_t max)
@@ -464,6 +475,15 @@ static void message_received(DictionaryIterator *iter, void *context)
         g.sec_hand.w = (t->value->int32 >> 16) & 0xFF;
         g.sec_hand.col = (t->value->uint32 >> 24) & 0xFF;
     }
+    if ((t = dict_find(iter, CENTER_KEY))) {
+        APP_LOG(APP_LOG_LEVEL_DEBUG, "center: 0x%x", (int)t->value->uint32);
+        g.center[0].r =
+            clamp((t->value->int32 >> 24) & 0xFF, 32) << (FIXED_SHIFT - 1);
+        g.center[0].col = (t->value->uint32 >> 16) & 0xFF;
+        g.center[1].r =
+            clamp((t->value->int32 >> 8) & 0xFF, 32) << (FIXED_SHIFT - 1);
+        g.center[1].col = t->value->uint32 & 0xFF;
+    }
 
     save_settings();
 
@@ -509,8 +529,10 @@ static void init()
     g.hour_hand.w = fixed(8);
     g.marker.w = fixed(2);
     g.marker.h = fixed(5);
-    g.center = fixed(7);
-    g.seccenter = fixed(4);
+    g.center[0].col = 0xFF;
+    g.center[0].r = fixed(7);
+    g.center[1].col = 0xF0;
+    g.center[1].r = fixed(4);
 
     read_settings();
 

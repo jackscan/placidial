@@ -18,7 +18,8 @@
     "bgcol": 3,
     "hour": 4,
     "min": 5,
-    "sec": 6
+    "sec": 6,
+    "center": 7
   },
   "resources": {
     "media": []
