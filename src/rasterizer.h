@@ -23,6 +23,7 @@
 #ifndef RASTERIZER_H
 #define RASTERIZER_H
 
+#include <stdbool.h>
 #include <stdint.h>
 
 #define FIXED_SHIFT 4
@@ -42,12 +43,12 @@ void draw_digit(struct GBitmap *bmp, int x, int y, int n);
 void draw_box(struct GBitmap *bmp, uint8_t color, int x, int y, int w, int h);
 void draw_rect(struct GBitmap *bmp, struct scanline *scanlines,
                uint8_t color, int32_t px, int32_t py,
-               int32_t dx, int32_t dy, int32_t len, int32_t w);
+               int32_t dx, int32_t dy, int32_t len, int32_t w, bool outline);
 void draw_white_rect(struct GBitmap *bmp, struct scanline *scanlines,
                      int32_t px, int32_t py, int32_t dx, int32_t dy,
                      int32_t len, int32_t w);
 void draw_circle(struct GBitmap *bmp, uint8_t color, int32_t cx, int32_t cy,
-                 int32_t r);
+                 int32_t r, bool outline);
 void draw_white_circle(struct GBitmap *bmp, int32_t cx, int32_t cy, int32_t r);
 
 static inline int32_t fixed(int i)

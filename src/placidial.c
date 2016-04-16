@@ -28,6 +28,7 @@ enum
 {
     SHOWSEC_KEY,
     SHOWDAY_KEY,
+    OUTLINE_KEY,
 };
 
 struct
@@ -43,6 +44,8 @@ struct
 
     int32_t center;
     int32_t seccenter;
+
+    bool outline;
 
     struct {
         int ofweek, ofmonth;
@@ -131,7 +134,7 @@ static void draw_red_marker(GBitmap *bmp, int cx, int cy, int a, int r, int s)
     int32_t dx = -sina * fixed(256) / TRIG_MAX_RATIO;
     int32_t dy = cosa * fixed(256) / TRIG_MAX_RATIO;
 
-    draw_rect(bmp, g.scanlines, 0xF0, px, py, dx, dy, r, g.marker.w);
+    draw_rect(bmp, g.scanlines, 0xF0, px, py, dx, dy, r, g.marker.w, false);
 }
 
 static void update_time(struct tm *t)
@@ -206,6 +209,14 @@ static void redraw(struct Layer *layer, GContext *ctx)
             sl->start = bounds.size.w;
             sl->end = 0;
         }
+    }
+
+    int r = (g.center + 0xf) >> FIXED_SHIFT;
+    for (int y = h2 - r - 2; y < h2 + r + 2; ++y)
+    {
+        struct scanline *sl = g.scanlines + y;
+        sl->start = (w2 - r - 2) >> 2;
+        sl->end = (w2 + r + 2 + 3) >> 2;
     }
 
     int32_t cx = fixed(w2);
@@ -287,8 +298,6 @@ static void redraw(struct Layer *layer, GContext *ctx)
     else if (g.day.update && (g.day.px || g.day.py))
         clear_day(bmp, g.day.px, g.day.py);
 
-    draw_white_circle(bmp, cx, cy, g.center);
-
     // dial marker
     {
         int32_t s = mr * 15 / 16;
@@ -310,8 +319,8 @@ static void redraw(struct Layer *layer, GContext *ctx)
         int32_t px = cx - hour.dx * mr * g.hour_hand.r0 / (fixed(256) * 256);
         int32_t py = cy - hour.dy * mr * g.hour_hand.r0 / (fixed(256) * 256);
         int32_t len = mr * (g.hour_hand.r1 + g.hour_hand.r0) / 256;
-        draw_white_rect(bmp, g.scanlines, px, py,
-                        hour.dx, hour.dy, len, g.hour_hand.w / 2);
+        draw_rect(bmp, g.scanlines, 0xFF, px, py,
+                           hour.dx, hour.dy, len, g.hour_hand.w / 2, g.outline);
     }
 
     // draw minute hand
@@ -319,22 +328,20 @@ static void redraw(struct Layer *layer, GContext *ctx)
         int32_t px = cx - min.dx * mr * g.min_hand.r0 / (fixed(256) * 256);
         int32_t py = cy - min.dy * mr * g.min_hand.r0 / (fixed(256) * 256);
         int32_t len = mr * (g.min_hand.r1 + g.min_hand.r0) / 256;
-        draw_white_rect(bmp, g.scanlines, px, py,
-                        min.dx, min.dy, len, g.min_hand.w / 2);
+        draw_rect(bmp, g.scanlines, 0xFF, px, py,
+                           min.dx, min.dy, len, g.min_hand.w / 2, g.outline);
     }
+
+    draw_circle(bmp, 0xFF, cx, cy, g.center, g.outline);
 
     if (g.showsec)
     {
-        // draw_rect(bmp, g.scanlines, 0xC0,
-        //       cx - sec.dx / fixed(1), cy - sec.dy / fixed(1),
-        //       sec.dx, sec.dy, sec.r, fixed(2));
         int32_t px = cx - sec.dx * mr * g.sec_hand.r0 / (fixed(256) * 256);
         int32_t py = cy - sec.dy * mr * g.sec_hand.r0 / (fixed(256) * 256);
         int32_t len = mr * (g.sec_hand.r1 + g.sec_hand.r0) / 256;
         draw_rect(bmp, g.scanlines, 0xF0,
-                  px, py, sec.dx, sec.dy, len, g.sec_hand.w / 2);
-        draw_circle(bmp, 0xC0, cx, cy, g.seccenter + fixed(1) / 2);
-        draw_circle(bmp, 0xF0, cx, cy, g.seccenter);
+                  px, py, sec.dx, sec.dy, len, g.sec_hand.w / 2, g.outline);
+        draw_circle(bmp, 0xF0, cx, cy, g.seccenter, g.outline);
     }
 
 
@@ -362,6 +369,11 @@ static void read_settings(void)
         g.day.show = persist_read_bool(SHOWDAY_KEY);
         APP_LOG(APP_LOG_LEVEL_DEBUG, "day.show: %i", g.day.show);
     }
+    if (persist_exists(OUTLINE_KEY))
+    {
+        g.outline = persist_read_bool(OUTLINE_KEY);
+        APP_LOG(APP_LOG_LEVEL_DEBUG, "outline: %i", g.outline);
+    }
 }
 
 static void save_settings(void)
@@ -369,6 +381,7 @@ static void save_settings(void)
     APP_LOG(APP_LOG_LEVEL_DEBUG, "saving settings");
     persist_write_bool(SHOWSEC_KEY, g.showsec != 0);
     persist_write_bool(SHOWDAY_KEY, g.day.show);
+    persist_write_bool(OUTLINE_KEY, g.outline);
 }
 
 static void message_received(DictionaryIterator *iter, void *context)
@@ -384,6 +397,10 @@ static void message_received(DictionaryIterator *iter, void *context)
         APP_LOG(APP_LOG_LEVEL_DEBUG, "showday: %d", (int)t->value->int32);
         g.day.show = t->value->int32 != 0;
         g.day.update = true;
+    }
+    if ((t = dict_find(iter, OUTLINE_KEY))) {
+        APP_LOG(APP_LOG_LEVEL_DEBUG, "outline: %d", (int)t->value->int32);
+        g.outline = t->value->int32 != 0;
     }
 
     save_settings();
@@ -410,6 +427,7 @@ static void init()
     app_message_register_inbox_received(message_received);
     app_message_open(64, 64);
 
+    g.outline = true;
     g.showsec = 0;
     g.day.show = true;
     g.sec_hand.w = fixed(3);

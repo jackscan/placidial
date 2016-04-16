@@ -48,10 +48,10 @@ static inline int32_t mini(int32_t a, int32_t b)
     return a < b ? a : b;
 }
 
-static inline uint8_t blend(uint32_t x, uint32_t y, int a)
+static inline uint8_t blend(uint32_t x, uint32_t y, int a, int d)
 {
-    uint32_t b = ((x & 0x33) * (5 - a) + (y & 0x33) * a);
-    uint32_t c = ((x & 0xCC) * (5 - a) + ((y | 0xC0) & 0xCC) * a);
+    uint32_t b = ((x & 0x33) * (d - a) + (y & 0x33) * a);
+    uint32_t c = ((x & 0xCC) * (d - a) + ((y | 0xC0) & 0xCC) * a);
     return (uint8_t)(((b & 0xCC) + (c & 0x330)) >> 2);
 }
 
@@ -66,11 +66,12 @@ void draw_box(struct GBitmap *bmp, uint8_t color, int x, int y, int w, int h)
 }
 
 void draw_circle(struct GBitmap *bmp, uint8_t color, int32_t cx, int32_t cy,
-                 int32_t r)
+                 int32_t r, bool outline)
 {
     int32_t half = (1 << (FIXED_SHIFT - 1));
     int smooth = 2;
     int32_t fs2 = fixed(smooth)/2;
+    int od = outline ? 3 : 4;
 
     int y0 = fixedfloor(cy - r);
     int y1 = fixedceil(cy + r);
@@ -90,10 +91,10 @@ void draw_circle(struct GBitmap *bmp, uint8_t color, int32_t cx, int32_t cy,
         {
             int32_t dx = fixed(x) + half - cx;
             int32_t ds = dx * dx + dy * dy;
-            int32_t a = (r2 - ds) * 5 / rs;
+            int32_t a = (r2 - ds) * 4 / rs;
             if (a <= 0) continue;
-            if (a >= 5) line[x] = color;
-            else line[x] = blend(line[x], color, a);
+            if (a >= 4) line[x] = color;
+            else line[x] = blend(line[x], color, a, od);
         }
     }
 }
@@ -272,7 +273,7 @@ void draw_white_rect(struct GBitmap *bmp, struct scanline *scanlines,
 
 void draw_rect(struct GBitmap *bmp, struct scanline *scanlines,
                uint8_t color, int32_t px, int32_t py,
-               int32_t dx, int32_t dy, int32_t len, int32_t w)
+               int32_t dx, int32_t dy, int32_t len, int32_t w, bool outline)
 {
     // length of (dx, dy) is assumed to be fixed(256)
     const int dshift = FIXED_SHIFT + 8;
@@ -288,6 +289,7 @@ void draw_rect(struct GBitmap *bmp, struct scanline *scanlines,
 
     int32_t half = (1 << (FIXED_SHIFT - 1));
 
+    int od = outline ? 3 : 4;
     int smooth = 2;
     int32_t fs2 = fixed(smooth)/2;
     int32_t wi = w - fs2;
@@ -361,10 +363,10 @@ void draw_rect(struct GBitmap *bmp, struct scanline *scanlines,
             int32_t d = mini(d0 < 0 ? w + d0 : w - d0,
                              d1 < fs2 ? d1 - s0 : s1 - d1);
 
-            int a = (d * 5 / smooth) >> FIXED_SHIFT;
+            int a = (d * 4 / smooth) >> FIXED_SHIFT;
             if (a <= 0) continue;
-            if (a >= 5) break;
-            else line[x] = blend(line[x], color, a);
+            if (a >= 4) break;
+            else line[x] = blend(line[x], color, a, od);
         }
 
         // only valid for opaque color
@@ -382,10 +384,10 @@ void draw_rect(struct GBitmap *bmp, struct scanline *scanlines,
             int32_t d = mini(d0 < 0 ? w + d0 : w - d0,
                              d1 < fs2 ? d1 - s0 : s1 - d1);
 
-            int a = (d * 5 / smooth) >> FIXED_SHIFT;
+            int a = (d * 4 / smooth) >> FIXED_SHIFT;
             if (a <= 0) continue;
-            if (a >= 5) line[x] = color;
-            else line[x] = blend(line[x], color, a);
+            if (a >= 4) line[x] = color;
+            else line[x] = blend(line[x], color, a, od);
         }
     }
 }

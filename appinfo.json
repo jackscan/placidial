@@ -13,7 +13,8 @@
   },
   "appKeys": {
     "showsec": 0,
-    "showday": 1
+    "showday": 1,
+    "outline": 2
   },
   "resources": {
     "media": []
