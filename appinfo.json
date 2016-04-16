@@ -15,7 +15,10 @@
     "showsec": 0,
     "showday": 1,
     "outline": 2,
-    "bgcol": 3
+    "bgcol": 3,
+    "hour": 4,
+    "min": 5,
+    "sec": 6
   },
   "resources": {
     "media": []

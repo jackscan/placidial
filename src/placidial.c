@@ -30,6 +30,9 @@ enum
     SHOWDAY_KEY,
     OUTLINE_KEY,
     BGCOL_KEY,
+    HOUR_KEY,
+    MIN_KEY,
+    SEC_KEY,
 };
 
 struct
@@ -57,6 +60,7 @@ struct
 
     struct {
         int32_t w, r0, r1;
+        uint8_t col;
     } hour_hand, min_hand, sec_hand;
 
     struct {
@@ -116,7 +120,8 @@ static void clear_day(GBitmap *bmp, int px, int py)
     }
 }
 
-static void draw_marker(GBitmap *bmp, int cx, int cy, int a, int r, int s)
+static void draw_marker(GBitmap *bmp, uint8_t col,
+                        int cx, int cy, int a, int r, int s)
 {
     int32_t sina = sin_lookup(a);
     int32_t cosa = cos_lookup(a);
@@ -125,19 +130,7 @@ static void draw_marker(GBitmap *bmp, int cx, int cy, int a, int r, int s)
     int32_t dx = -sina * fixed(256) / TRIG_MAX_RATIO;
     int32_t dy = cosa * fixed(256) / TRIG_MAX_RATIO;
 
-    draw_white_rect(bmp, g.scanlines, px, py, dx, dy, r, g.marker.w);
-}
-
-static void draw_red_marker(GBitmap *bmp, int cx, int cy, int a, int r, int s)
-{
-    int32_t sina = sin_lookup(a);
-    int32_t cosa = cos_lookup(a);
-    int32_t px = cx + sina * s / TRIG_MAX_RATIO;
-    int32_t py = cy - cosa * s / TRIG_MAX_RATIO;
-    int32_t dx = -sina * fixed(256) / TRIG_MAX_RATIO;
-    int32_t dy = cosa * fixed(256) / TRIG_MAX_RATIO;
-
-    draw_rect(bmp, g.scanlines, 0xF0, px, py, dx, dy, r, g.marker.w, false);
+    draw_rect(bmp, g.scanlines, col, px, py, dx, dy, r, g.marker.w, false);
 }
 
 static void update_time(struct tm *t)
@@ -314,9 +307,10 @@ static void redraw(struct Layer *layer, GContext *ctx)
         int32_t b =
             ((g.hour * 60 + g.min + 30) % 720) * 12 / 720 * TRIG_MAX_ANGLE / 12;
 
-        draw_marker(bmp, cx, cy, a, r, s);
-        if (b != a) draw_marker(bmp, cx, cy, b, r, s);
-        if (c >= 0 && c != a && c != b) draw_red_marker(bmp, cx, cy, c, r, s);
+        draw_marker(bmp, g.min_hand.col, cx, cy, a, r, s);
+        if (b != a) draw_marker(bmp, g.hour_hand.col, cx, cy, b, r, s);
+        if (c >= 0 && c != a && c != b)
+            draw_marker(bmp, g.sec_hand.col, cx, cy, c, r, s);
     }
 
     // draw hour hand
@@ -324,7 +318,7 @@ static void redraw(struct Layer *layer, GContext *ctx)
         int32_t px = cx - hour.dx * mr * g.hour_hand.r0 / (fixed(256) * 256);
         int32_t py = cy - hour.dy * mr * g.hour_hand.r0 / (fixed(256) * 256);
         int32_t len = mr * (g.hour_hand.r1 + g.hour_hand.r0) / 256;
-        draw_rect(bmp, g.scanlines, 0xFF, px, py,
+        draw_rect(bmp, g.scanlines, g.hour_hand.col, px, py,
                            hour.dx, hour.dy, len, g.hour_hand.w / 2, g.outline);
     }
 
@@ -333,7 +327,7 @@ static void redraw(struct Layer *layer, GContext *ctx)
         int32_t px = cx - min.dx * mr * g.min_hand.r0 / (fixed(256) * 256);
         int32_t py = cy - min.dy * mr * g.min_hand.r0 / (fixed(256) * 256);
         int32_t len = mr * (g.min_hand.r1 + g.min_hand.r0) / 256;
-        draw_rect(bmp, g.scanlines, 0xFF, px, py,
+        draw_rect(bmp, g.scanlines, g.min_hand.col, px, py,
                            min.dx, min.dy, len, g.min_hand.w / 2, g.outline);
     }
 
@@ -344,7 +338,7 @@ static void redraw(struct Layer *layer, GContext *ctx)
         int32_t px = cx - sec.dx * mr * g.sec_hand.r0 / (fixed(256) * 256);
         int32_t py = cy - sec.dy * mr * g.sec_hand.r0 / (fixed(256) * 256);
         int32_t len = mr * (g.sec_hand.r1 + g.sec_hand.r0) / 256;
-        draw_rect(bmp, g.scanlines, 0xF0,
+        draw_rect(bmp, g.scanlines, g.sec_hand.col,
                   px, py, sec.dx, sec.dy, len, g.sec_hand.w / 2, g.outline);
         draw_circle(bmp, 0xF0, cx, cy, g.seccenter, g.outline);
     }
@@ -384,6 +378,27 @@ static void read_settings(void)
         g.bgcol = (uint8_t)persist_read_int(BGCOL_KEY);
         APP_LOG(APP_LOG_LEVEL_DEBUG, "bgcol: 0x%x", g.bgcol);
     }
+    if (persist_exists(HOUR_KEY))
+    {
+        persist_read_data(HOUR_KEY, &g.hour_hand, sizeof(g.hour_hand));
+        APP_LOG(APP_LOG_LEVEL_DEBUG, "hour: %d, %d, %d, 0x%x",
+                (int)g.hour_hand.r0, (int)g.hour_hand.r1,
+                (int)g.hour_hand.w, g.hour_hand.col);
+    }
+    if (persist_exists(MIN_KEY))
+    {
+        persist_read_data(MIN_KEY, &g.min_hand, sizeof(g.min_hand));
+        APP_LOG(APP_LOG_LEVEL_DEBUG, "min: %d, %d, %d, 0x%x",
+                (int)g.min_hand.r0, (int)g.min_hand.r1,
+                (int)g.min_hand.w, g.min_hand.col);
+    }
+    if (persist_exists(SEC_KEY))
+    {
+        persist_read_data(SEC_KEY, &g.sec_hand, sizeof(g.sec_hand));
+        APP_LOG(APP_LOG_LEVEL_DEBUG, "sec: %d, %d, %d, 0x%x",
+                (int)g.sec_hand.r0, (int)g.sec_hand.r1,
+                (int)g.sec_hand.w, g.sec_hand.col);
+    }
 }
 
 static void save_settings(void)
@@ -393,6 +408,9 @@ static void save_settings(void)
     persist_write_bool(SHOWDAY_KEY, g.day.show);
     persist_write_bool(OUTLINE_KEY, g.outline);
     persist_write_int(BGCOL_KEY, (int)(unsigned)g.bgcol);
+    persist_write_data(HOUR_KEY, &g.hour_hand, sizeof(g.hour_hand));
+    persist_write_data(MIN_KEY, &g.min_hand, sizeof(g.min_hand));
+    persist_write_data(SEC_KEY, &g.sec_hand, sizeof(g.sec_hand));
 }
 
 static void message_received(DictionaryIterator *iter, void *context)
@@ -418,6 +436,27 @@ static void message_received(DictionaryIterator *iter, void *context)
         g.bgcol = t->value->uint8;
         free(g.scanlines);
         g.scanlines = NULL;
+    }
+    if ((t = dict_find(iter, HOUR_KEY))) {
+        APP_LOG(APP_LOG_LEVEL_DEBUG, "hour: 0x%x", (int)t->value->uint32);
+        g.hour_hand.r0 = t->value->int32 & 0xFF;
+        g.hour_hand.r1 = (t->value->int32 >> 8) & 0xFF;
+        g.hour_hand.w = (t->value->int32 >> 16) & 0xFF;
+        g.hour_hand.col = (t->value->uint32 >> 24) & 0xFF;
+    }
+    if ((t = dict_find(iter, MIN_KEY))) {
+        APP_LOG(APP_LOG_LEVEL_DEBUG, "min: 0x%x", (int)t->value->uint32);
+        g.min_hand.r0 = t->value->int32 & 0xFF;
+        g.min_hand.r1 = (t->value->int32 >> 8) & 0xFF;
+        g.min_hand.w = (t->value->int32 >> 16) & 0xFF;
+        g.min_hand.col = (t->value->uint32 >> 24) & 0xFF;
+    }
+    if ((t = dict_find(iter, SEC_KEY))) {
+        APP_LOG(APP_LOG_LEVEL_DEBUG, "sec: 0x%x", (int)t->value->uint32);
+        g.sec_hand.r0 = t->value->int32 & 0xFF;
+        g.sec_hand.r1 = (t->value->int32 >> 8) & 0xFF;
+        g.sec_hand.w = (t->value->int32 >> 16) & 0xFF;
+        g.sec_hand.col = (t->value->uint32 >> 24) & 0xFF;
     }
 
     save_settings();
@@ -451,11 +490,14 @@ static void init()
     g.sec_hand.w = fixed(3);
     g.sec_hand.r0 = 40;
     g.sec_hand.r1 = 210;
+    g.sec_hand.col = 0xF0;
     g.min_hand.w = fixed(8);
-    g.min_hand.r0 = 25;
+    g.min_hand.r0 = 0;
     g.min_hand.r1 = 210;
-    g.hour_hand.r0 = 8;
+    g.min_hand.col = 0xFF;
+    g.hour_hand.r0 = 0;
     g.hour_hand.r1 = 160;
+    g.hour_hand.col = 0xFF;
     g.hour_hand.w = fixed(8);
     g.marker.w = fixed(2);
     g.marker.h = fixed(5);
