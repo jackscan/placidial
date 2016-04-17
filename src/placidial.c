@@ -35,6 +35,7 @@ enum
     SEC_KEY,
     CENTER_KEY,
     MARKER_KEY,
+    DAYCOLORS_KEY,
     NUM_KEYS
 };
 
@@ -63,6 +64,14 @@ struct
         bool show;
     } day;
 
+    struct
+    {
+        uint8_t dayofmonth;
+        uint8_t weekday;
+        uint8_t sunday;
+        uint8_t today;
+    } daycolors;
+
     struct {
         int32_t w, r0, r1;
         uint8_t col;
@@ -81,13 +90,16 @@ static void draw_week(GBitmap *bmp, int x, int y)
 
     for (int i = 0; i < 4; ++i)
     {
-        uint8_t color = i == g.day.ofweek ? 0xF0 : i == 0 ? 0xDB : 0xFF;
+        uint8_t color = i == g.day.ofweek
+                            ? g.daycolors.today
+                            : i == 0 ? g.daycolors.sunday : g.daycolors.weekday;
         draw_box(bmp, color, x + i * dx, y, w, w);
     }
 
     for (int i = 1; i < 4; ++i)
     {
-        uint8_t color = i + 3 == g.day.ofweek ? 0xF0 : 0xFF;
+        uint8_t color =
+            i + 3 == g.day.ofweek ? g.daycolors.today : g.daycolors.weekday;
         draw_box(bmp, color, x + i * dx, y + dy, w, w);
     }
 }
@@ -102,8 +114,8 @@ static void draw_day(GBitmap *bmp, int x, int y)
 
     int d10 = g.day.ofmonth / 10;
     int d01 = g.day.ofmonth - d10 * 10;
-    draw_digit(bmp, x0, y - DIGIT_HEIGHT - my, d10);
-    draw_digit(bmp, x1, y - DIGIT_HEIGHT - my, d01);
+    draw_digit(bmp, g.daycolors.dayofmonth, x0, y - DIGIT_HEIGHT - my, d10);
+    draw_digit(bmp, g.daycolors.dayofmonth, x1, y - DIGIT_HEIGHT - my, d01);
 }
 
 static void clear_day(GBitmap *bmp, int px, int py)
@@ -418,6 +430,13 @@ static void read_settings(void)
         APP_LOG(APP_LOG_LEVEL_DEBUG, "marker: %d, %d",
                 (int)g.marker.w, (int)g.marker.h);
     }
+    if (persist_exists(DAYCOLORS_KEY))
+    {
+        persist_read_data(DAYCOLORS_KEY, &g.marker, sizeof(g.marker));
+        APP_LOG(APP_LOG_LEVEL_DEBUG, "daycolors: 0x%x, 0x%x, 0x%x, 0x%x",
+                g.daycolors.dayofmonth, g.daycolors.weekday,
+                g.daycolors.sunday, g.daycolors.today);
+    }
 }
 
 static void save_settings(void)
@@ -432,6 +451,7 @@ static void save_settings(void)
     persist_write_data(SEC_KEY, &g.sec_hand, sizeof(g.sec_hand));
     persist_write_data(CENTER_KEY, &g.center, sizeof(g.center));
     persist_write_data(MARKER_KEY, &g.marker, sizeof(g.marker));
+    persist_write_data(DAYCOLORS_KEY, &g.daycolors, sizeof(g.daycolors));
 }
 
 static inline int32_t clamp(int32_t val, int32_t max)
@@ -498,6 +518,13 @@ static void message_received(DictionaryIterator *iter, void *context)
         g.marker.w = fixed(clamp((t->value->int32 >> 8) & 0xFF, 16));
         g.marker.h = fixed(clamp(t->value->int32 & 0xFF, 32));
     }
+    if ((t = dict_find(iter, DAYCOLORS_KEY))) {
+        APP_LOG(APP_LOG_LEVEL_DEBUG, "daycolors: 0x%x", (int)t->value->uint32);
+        g.daycolors.dayofmonth = (t->value->uint32 >> 24) & 0xFF;
+        g.daycolors.weekday = (t->value->uint32 >> 16) & 0xFF;
+        g.daycolors.sunday = (t->value->uint32 >> 8) & 0xFF;
+        g.daycolors.today = t->value->uint32 & 0xFF;
+    }
 
     save_settings();
 
@@ -547,6 +574,10 @@ static void init()
     g.center[0].r = fixed(7);
     g.center[1].col = 0xF0;
     g.center[1].r = fixed(4);
+    g.daycolors.dayofmonth = 0xFF;
+    g.daycolors.weekday = 0xFF;
+    g.daycolors.sunday = 0xDB;
+    g.daycolors.today = 0xF0;
 
     read_settings();
 

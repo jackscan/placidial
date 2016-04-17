@@ -20,7 +20,8 @@
     "min": 5,
     "sec": 6,
     "center": 7,
-    "marker": 8
+    "marker": 8,
+    "daycolors": 9
   },
   "resources": {
     "media": []

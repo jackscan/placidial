@@ -392,7 +392,7 @@ void draw_rect(struct GBitmap *bmp, struct scanline *scanlines,
     }
 }
 
-void draw_digit(struct GBitmap *bmp, int x, int y, int n)
+void draw_digit(struct GBitmap *bmp, uint8_t color, int x, int y, int n)
 {
     static const uint32_t digitmask[5] = {
         07777717737,
@@ -405,6 +405,7 @@ void draw_digit(struct GBitmap *bmp, int x, int y, int n)
     int h = 3;
     int s = x >> 2;
     int n3 = n * 3;
+    uint32_t col4 = (color << 24) | (color << 16) | (color << 8) | color;
 
     for (int r = 0; r < 5; ++r)
     {
@@ -414,7 +415,7 @@ void draw_digit(struct GBitmap *bmp, int x, int y, int n)
             uint32_t mask = (digitmask[r] >> n3) & 0x7;
             uint32_t *line = (uint32_t *)gbitmap_get_data_row_info(bmp, y).data;
             for (int j = 0; mask; ++j, mask >>= 1)
-                if (mask & 1) line[s + j] = 0xFFFFFFFF;
+                if (mask & 1) line[s + j] = col4;
         }
     }
 
