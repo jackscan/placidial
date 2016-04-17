@@ -432,7 +432,7 @@ static void read_settings(void)
     }
     if (persist_exists(DAYCOLORS_KEY))
     {
-        persist_read_data(DAYCOLORS_KEY, &g.marker, sizeof(g.marker));
+        persist_read_data(DAYCOLORS_KEY, &g.daycolors, sizeof(g.daycolors));
         APP_LOG(APP_LOG_LEVEL_DEBUG, "daycolors: 0x%x, 0x%x, 0x%x, 0x%x",
                 g.daycolors.dayofmonth, g.daycolors.weekday,
                 g.daycolors.sunday, g.daycolors.today);
