@@ -19,7 +19,8 @@
     "hour": 4,
     "min": 5,
     "sec": 6,
-    "center": 7
+    "center": 7,
+    "marker": 8
   },
   "resources": {
     "media": []

@@ -34,6 +34,7 @@ enum
     MIN_KEY,
     SEC_KEY,
     CENTER_KEY,
+    MARKER_KEY,
     NUM_KEYS
 };
 
@@ -134,7 +135,8 @@ static void draw_marker(GBitmap *bmp, uint8_t col,
     int32_t dx = -sina * fixed(256) / TRIG_MAX_RATIO;
     int32_t dy = cosa * fixed(256) / TRIG_MAX_RATIO;
 
-    draw_rect(bmp, g.scanlines, col, px, py, dx, dy, r, g.marker.w, false);
+    draw_rect(bmp, g.scanlines, col, px, py, dx, dy, r,
+              g.marker.w / 2, g.outline);
 }
 
 static void update_time(struct tm *t)
@@ -410,6 +412,12 @@ static void read_settings(void)
                 (int)g.center[0].r, g.center[0].col,
                 (int)g.center[1].r, g.center[1].col);
     }
+    if (persist_exists(MARKER_KEY))
+    {
+        persist_read_data(MARKER_KEY, &g.marker, sizeof(g.marker));
+        APP_LOG(APP_LOG_LEVEL_DEBUG, "marker: %d, %d",
+                (int)g.marker.w, (int)g.marker.h);
+    }
 }
 
 static void save_settings(void)
@@ -423,6 +431,7 @@ static void save_settings(void)
     persist_write_data(MIN_KEY, &g.min_hand, sizeof(g.min_hand));
     persist_write_data(SEC_KEY, &g.sec_hand, sizeof(g.sec_hand));
     persist_write_data(CENTER_KEY, &g.center, sizeof(g.center));
+    persist_write_data(MARKER_KEY, &g.marker, sizeof(g.marker));
 }
 
 static inline int32_t clamp(int32_t val, int32_t max)
@@ -484,6 +493,11 @@ static void message_received(DictionaryIterator *iter, void *context)
             clamp((t->value->int32 >> 8) & 0xFF, 32) << (FIXED_SHIFT - 1);
         g.center[1].col = t->value->uint32 & 0xFF;
     }
+    if ((t = dict_find(iter, MARKER_KEY))) {
+        APP_LOG(APP_LOG_LEVEL_DEBUG, "marker: 0x%x", (int)t->value->uint32);
+        g.marker.w = fixed(clamp((t->value->int32 >> 8) & 0xFF, 16));
+        g.marker.h = fixed(clamp(t->value->int32 & 0xFF, 32));
+    }
 
     save_settings();
 
@@ -527,7 +541,7 @@ static void init()
     g.hour_hand.r1 = 160;
     g.hour_hand.col = 0xFF;
     g.hour_hand.w = fixed(8);
-    g.marker.w = fixed(2);
+    g.marker.w = fixed(4);
     g.marker.h = fixed(5);
     g.center[0].col = 0xFF;
     g.center[0].r = fixed(7);
