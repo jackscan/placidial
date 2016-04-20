@@ -89,6 +89,7 @@ struct
     struct {
         uint8_t warnlevel;
         uint8_t color;
+        uint8_t vibepattern;
         bool showconn;
     } statusconf;
 } g;
@@ -628,6 +629,17 @@ static void connection_handler(bool connected)
     if (connected != g.status.connected)
     {
         g.status.connected = connected;
+        if (! connected && g.statusconf.vibepattern)
+        {
+            switch (g.statusconf.vibepattern)
+            {
+            case 0: break;
+            default:
+            case 1: vibes_short_pulse(); break;
+            case 2: vibes_long_pulse(); break;
+            case 3: vibes_double_pulse(); break;
+            }
+        }
         layer_mark_dirty(window_get_root_layer(g.window));
     }
 }
@@ -695,6 +707,7 @@ static void init()
     g.statusconf.color = 0xFF;
     g.statusconf.showconn = true;
     g.statusconf.warnlevel = 10;
+    g.statusconf.vibepattern = 3;
 
     read_settings();
 
