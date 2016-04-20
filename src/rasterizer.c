@@ -420,3 +420,84 @@ void draw_digit(struct GBitmap *bmp, uint8_t color, int x, int y, int n)
     }
 
 }
+
+void draw_disconnected(struct GBitmap *bmp, struct scanline *scanlines,
+                       uint8_t color, int cx, int cy)
+{
+    static const uint8_t bitmask[3] = {
+        0b00010100,
+        0b01110111,
+        0b00010100,
+    };
+
+    int w = 3;
+    int h = 4;
+
+    int x = cx - w * 7 / 2;
+    int y = cy - (h * 3 - 1) / 2;
+
+    for (int r = 0; r < 3; ++r)
+    {
+        int k = r != 1 ? h : h - 1;
+        for (int i = 0; i < k; ++i, ++y)
+        {
+            uint8_t mask = bitmask[r];
+            uint8_t *line = gbitmap_get_data_row_info(bmp, y).data;
+            for (int j = 0; mask; ++j, mask >>= 1)
+                if (mask & 0x1)
+                    for (int n = 0; n < w; ++n)
+                        line[x + j * w + n] = color;
+
+            update_scanline(scanlines + y, x, x + 8 * w);
+        }
+    }
+}
+
+void draw_battery(struct GBitmap *bmp, struct scanline *scanlines,
+                  uint8_t color, int cx, int cy, uint8_t level)
+{
+    int w = 22;
+    int h = 10;
+    int b = 2;
+
+    int x = cx - w / 2;
+    int y = cy - h / 2;
+
+    int l = (level * (w - b * 3 - 2) + 50)/ 100;
+    uint8_t *line;
+
+    for (int j = 0; j < b; ++j, ++y)
+    {
+        line = gbitmap_get_data_row_info(bmp, y).data;
+        for (int i = 0; i < w - b; ++i)
+            line[i + x] = color;
+        update_scanline(scanlines + y, x, x + w);
+    }
+
+    for (int j = b; j < h - b; ++j, ++y)
+    {
+        line = gbitmap_get_data_row_info(bmp, y).data;
+        for (int i = 0; i < b; ++i) line[x + i] = color;
+        int k = b;
+        if (j > b && j < h - b - 1)
+        {
+            for (int i = 0; i < l; ++i)
+                line[x + b + 1 + i] = color;
+            k += b;
+        }
+
+        for (int i = 0; i < k; ++i) line[x + w - 2 * b + i] = color;
+
+        update_scanline(scanlines + y, x, x + w);
+    }
+
+    for (int j = 0; j < b; ++j, ++y)
+    {
+        line = gbitmap_get_data_row_info(bmp, y).data;
+        for (int i = 0; i < w - b; ++i)
+            line[i + x] = color;
+        update_scanline(scanlines + y, x, x + w);
+    }
+
+    update_scanline(scanlines + y, x, x + w);
+}

@@ -80,6 +80,17 @@ struct
     struct {
         int32_t w, h;
     } marker;
+
+    struct {
+        bool connected;
+        uint8_t batlevel;
+    } status;
+
+    struct {
+        uint8_t warnlevel;
+        uint8_t color;
+        bool showconn;
+    } statusconf;
 } g;
 
 static void draw_week(GBitmap *bmp, int x, int y)
@@ -137,6 +148,12 @@ static void clear_day(GBitmap *bmp, int px, int py)
     }
 }
 
+static bool show_status(void)
+{
+    return g.statusconf.showconn ||
+        g.status.batlevel <= g.statusconf.warnlevel;
+}
+
 static void draw_marker(GBitmap *bmp, uint8_t col,
                         int cx, int cy, int a, int r, int s)
 {
@@ -169,7 +186,24 @@ static inline int absi(int i)
     return i < 0 ? -i : i;
 }
 
-static void redraw(struct Layer *layer, GContext *ctx)
+static inline int sector(int dx, int dy)
+{
+    return (absi(dx) < absi(dy) ? 1 : 0) | (dx + dy < 0 ? 2 : 0);
+}
+
+static inline int sector_x(int s)
+{
+    static const int dx[4] = { 1, 0, -1, 0 };
+    return dx[s & 0x3];
+}
+
+static inline int sector_y(int s)
+{
+    static const int dy[4] = { 0, 1, 0, -1 };
+    return dy[s & 0x3];
+}
+
+static void render(GContext *ctx)
 {
     GBitmap *bmp = graphics_capture_frame_buffer(ctx);
     if (bmp == NULL)
@@ -272,7 +306,7 @@ static void redraw(struct Layer *layer, GContext *ctx)
     }
 
     // day
-    if (g.day.show)
+    if (g.day.show || show_status())
     {
         int r = (mr >> FIXED_SHIFT) * 9 / 16;
 
@@ -298,21 +332,65 @@ static void redraw(struct Layer *layer, GContext *ctx)
         int px = w2 + dx;
         int py = h2 + dy;
 
-        if (g.day.px != px || g.day.py != py)
+        if (g.day.show)
         {
-            if (g.day.px || g.day.py)
-                clear_day(bmp, g.day.px, g.day.py);
-            draw_day(bmp, px, py);
-            g.day.px = px;
-            g.day.py = py;
+            if (g.day.px != px || g.day.py != py)
+            {
+                if (g.day.px || g.day.py)
+                    clear_day(bmp, g.day.px, g.day.py);
+                draw_day(bmp, px, py);
+                g.day.px = px;
+                g.day.py = py;
+            }
+            else if (g.day.update || g.showsec)
+                draw_day(bmp, g.day.px, g.day.py);
         }
-        else if (g.day.update || g.showsec)
-            draw_day(bmp, g.day.px, g.day.py);
 
-        g.day.update = false;
+        // find places for status icons
+        if (show_status())
+        {
+            int blocked[4] = { 0 };
+            if (g.day.show) blocked[sector(dx, dy)] = 2;
+            blocked[sector(hour.dx, hour.dy)] = 1;
+            blocked[sector(min.dx, min.dy)] = 1;
+            int first = sector(-dx, -dy);
+            int i;
+            for (i = 0; i < 4; ++i)
+                if (!blocked[(first + i) % 4])
+                    break;
+            int s = (i + first) % 4;
+
+            int px = w2 + sector_x(s) * r;
+            int py = h2 + sector_y(s) * r;
+
+            if (g.statusconf.showconn && ! g.status.connected)
+            {
+                draw_disconnected(bmp, g.scanlines, g.statusconf.color, px, py);
+                blocked[s] = 2;
+                for (i = 0; i < 4; ++i)
+                    if (blocked[(first + i) % 4] < 2)
+                        break;
+                s = (i + first) % 4;
+                px = w2 + sector_x(s) * r;
+                py = h2 + sector_y(s) * r;
+            }
+
+            if (g.status.batlevel <= g.statusconf.warnlevel)
+                draw_battery(bmp, g.scanlines, g.statusconf.color, px, py,
+                             g.status.batlevel);
+
+
+            // draw_status(bmp, px, py);
+        }
     }
-    else if (g.day.update && (g.day.px || g.day.py))
+
+    if (! g.day.show && g.day.update && (g.day.px || g.day.py))
+    {
         clear_day(bmp, g.day.px, g.day.py);
+    }
+
+    g.day.update = false;
+
 
     // dial marker
     {
@@ -363,6 +441,11 @@ static void redraw(struct Layer *layer, GContext *ctx)
 
 
     graphics_release_frame_buffer(ctx, bmp);
+}
+
+static void redraw(struct Layer *layer, GContext *ctx)
+{
+    render(ctx);
 }
 
 static void tick_handler(struct tm *t, TimeUnits units_changed)
@@ -531,6 +614,24 @@ static void message_received(DictionaryIterator *iter, void *context)
     layer_mark_dirty(window_get_root_layer(g.window));
 }
 
+static void battery_handler(BatteryChargeState charge)
+{
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "battery: %u%%",
+            (unsigned)charge.charge_percent);
+    g.status.batlevel = charge.charge_percent;
+}
+
+static void connection_handler(bool connected)
+{
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "bt: %s",
+            connected ? "connected" : "disconnected");
+    if (connected != g.status.connected)
+    {
+        g.status.connected = connected;
+        layer_mark_dirty(window_get_root_layer(g.window));
+    }
+}
+
 static void window_load(Window *window)
 {
     Layer *window_layer = window_get_root_layer(window);
@@ -538,11 +639,24 @@ static void window_load(Window *window)
     tick_timer_service_subscribe(g.showsec ? SECOND_UNIT : MINUTE_UNIT,
                                  tick_handler);
     g.scanlines = NULL;
+
+    g.status.batlevel = battery_state_service_peek().charge_percent;
+    battery_state_service_subscribe(battery_handler);
+
+    g.status.connected = connection_service_peek_pebble_app_connection();
+    ConnectionHandlers handlers = {
+        .pebble_app_connection_handler = connection_handler,
+    };
+    connection_service_subscribe(handlers);
 }
 
 static void window_unload(Window *window)
 {
+    battery_state_service_unsubscribe();
+    connection_service_unsubscribe();
+    tick_timer_service_unsubscribe();
     free(g.scanlines);
+    g.scanlines = NULL;
 }
 
 static void init()
@@ -578,6 +692,9 @@ static void init()
     g.daycolors.weekday = 0xFF;
     g.daycolors.sunday = 0xDB;
     g.daycolors.today = 0xF0;
+    g.statusconf.color = 0xFF;
+    g.statusconf.showconn = true;
+    g.statusconf.warnlevel = 10;
 
     read_settings();
 

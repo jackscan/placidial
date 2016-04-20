@@ -51,6 +51,11 @@ void draw_circle(struct GBitmap *bmp, uint8_t color, int32_t cx, int32_t cy,
                  int32_t r, bool outline);
 void draw_white_circle(struct GBitmap *bmp, int32_t cx, int32_t cy, int32_t r);
 
+void draw_disconnected(struct GBitmap *bmp, struct scanline *scanlines,
+                       uint8_t color, int cx, int cy);
+void draw_battery(struct GBitmap *bmp, struct scanline *scanlines,
+                  uint8_t color, int cx, int cy, uint8_t level);
+
 static inline int32_t fixed(int i)
 {
    return (int32_t)i << FIXED_SHIFT;
