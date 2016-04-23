@@ -473,8 +473,8 @@ void draw_disconnected(struct GBitmap *bmp, struct scanline *scanlines,
 void draw_battery(struct GBitmap *bmp, struct scanline *scanlines,
                   uint8_t color, int cx, int cy, uint8_t level)
 {
-    int w = 22;
-    int h = 10;
+    int w = 26;
+    int h = 12;
     int b = 2;
 
     int x = cx - w / 2;
