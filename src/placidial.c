@@ -82,8 +82,8 @@ struct
     } marker;
 
     struct {
+        BatteryChargeState batstate;
         bool connected;
-        uint8_t batlevel;
     } status;
 
     struct {
@@ -149,10 +149,19 @@ static void clear_day(GBitmap *bmp, int px, int py)
     }
 }
 
-static bool show_status(void)
+static inline bool show_battery(void)
 {
-    return g.statusconf.showconn ||
-        g.status.batlevel <= g.statusconf.warnlevel;
+    return g.status.batstate.charge_percent <= g.statusconf.warnlevel;
+}
+
+static inline bool show_disconnected(void)
+{
+    return g.statusconf.showconn && ! g.status.connected;
+}
+
+static inline bool show_status(void)
+{
+    return show_disconnected() || show_battery();
 }
 
 static void draw_marker(GBitmap *bmp, uint8_t col,
@@ -364,7 +373,7 @@ static void render(GContext *ctx)
             int px = w2 + sector_x(s) * r;
             int py = h2 + sector_y(s) * r;
 
-            if (g.statusconf.showconn && ! g.status.connected)
+            if (show_disconnected())
             {
                 draw_disconnected(bmp, g.scanlines, g.statusconf.color, px, py);
                 blocked[s] = 2;
@@ -376,9 +385,9 @@ static void render(GContext *ctx)
                 py = h2 + sector_y(s) * r;
             }
 
-            if (g.status.batlevel <= g.statusconf.warnlevel)
+            if (show_battery())
                 draw_battery(bmp, g.scanlines, g.statusconf.color, px, py,
-                             g.status.batlevel);
+                             g.status.batstate.charge_percent);
 
 
             // draw_status(bmp, px, py);
@@ -619,7 +628,7 @@ static void battery_handler(BatteryChargeState charge)
 {
     APP_LOG(APP_LOG_LEVEL_DEBUG, "battery: %u%%",
             (unsigned)charge.charge_percent);
-    g.status.batlevel = charge.charge_percent;
+    g.status.batstate = charge;
 }
 
 static void connection_handler(bool connected)
@@ -652,8 +661,8 @@ static void window_load(Window *window)
                                  tick_handler);
     g.scanlines = NULL;
 
-    g.status.batlevel = battery_state_service_peek().charge_percent;
     battery_state_service_subscribe(battery_handler);
+    g.status.batstate = battery_state_service_peek();
 
     g.status.connected = connection_service_peek_pebble_app_connection();
     ConnectionHandlers handlers = {
