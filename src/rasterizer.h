@@ -34,6 +34,12 @@
 #define SMALL_DIGIT_WIDTH 6
 #define SMALL_DIGIT_HEIGHT 9
 
+#define DISCONNECT_ICON_WIDTH 16
+#define DISCONNECT_ICON_HEIGHT 23
+
+#define BATTERY_ICON_WIDTH 26
+#define BATTERY_ICON_HEIGHT 12
+
 struct GBitmap;
 
 struct scanline
