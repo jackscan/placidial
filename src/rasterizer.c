@@ -424,32 +424,49 @@ void draw_digit(struct GBitmap *bmp, uint8_t color, int x, int y, int n)
 void draw_disconnected(struct GBitmap *bmp, struct scanline *scanlines,
                        uint8_t color, int cx, int cy)
 {
-    static const uint8_t bitmask[3] = {
-        0b00010100,
-        0b01110111,
-        0b00010100,
+    static const uint32_t bitmask[] = {
+        0b0000001111000000,
+        0b0000011111000000,
+        0b0000111111000000,
+        0b0001111111000000,
+        0b0011110111000000,
+        0b0111100111000111,
+        0b1111000111001111,
+        0b0111100111011110,
+        0b0011110111111100,
+        0b0001111111111000,
+        0b0000111111110000,
+        0b0000011111100000,
+        0b0000111111110000,
+        0b0001111111111000,
+        0b0011110111111100,
+        0b0111100111011110,
+        0b1111000111001111,
+        0b0111100111000111,
+        0b0011110111000000,
+        0b0001111111000000,
+        0b0000111111000000,
+        0b0000011111000000,
+        0b0000001111000000,
     };
 
-    int w = 3;
-    int h = 4;
+    int w = 32;
 
-    int x = cx - w * 7 / 2;
-    int y = cy - (h * 3 - 1) / 2;
 
-    for (int r = 0; r < 3; ++r)
+    int h = ARRAY_LENGTH(bitmask);
+
+    int x = cx - w / 2;
+    int y = cy - h / 2;
+
+    for (int r = 0; r < h; ++r, ++y)
     {
-        int k = r != 1 ? h : h - 1;
-        for (int i = 0; i < k; ++i, ++y)
-        {
-            uint8_t mask = bitmask[r];
-            uint8_t *line = gbitmap_get_data_row_info(bmp, y).data;
-            for (int j = 0; mask; ++j, mask >>= 1)
-                if (mask & 0x1)
-                    for (int n = 0; n < w; ++n)
-                        line[x + j * w + n] = color;
+        uint32_t mask = bitmask[r];
+        uint8_t *line = gbitmap_get_data_row_info(bmp, y).data;
+        for (int j = 0; mask; ++j, mask >>= 1)
+            if (mask & 0x1)
+                line[x + j] = color;
 
-            update_scanline(scanlines + y, x, x + 8 * w);
-        }
+        update_scanline(scanlines + y, x, x + w);
     }
 }
 
