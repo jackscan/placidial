@@ -277,6 +277,36 @@ static inline int sector_y(int s)
     return dy[s & 0x3];
 }
 
+static void draw_status(GBitmap *bmp, int cx, int cy, int r,
+                        int *blocked, int first)
+{
+
+    int i;
+    for (i = 0; i < 4; ++i)
+        if (!blocked[(first + i) % 4])
+            break;
+    int s = (i + first) % 4;
+
+    int px = cx + sector_x(s) * r;
+    int py = cy + sector_y(s) * r;
+
+    if (show_disconnected())
+    {
+        draw_disconnected(bmp, g.scanlines, g.statusconf.color, px, py);
+        blocked[s] = 2;
+        for (i = 0; i < 4; ++i)
+            if (blocked[(first + i) % 4] < 2)
+                break;
+        s = (i + first) % 4;
+        px = cx + sector_x(s) * r;
+        py = cy + sector_y(s) * r;
+    }
+
+    if (show_battery())
+        draw_battery(bmp, g.scanlines, g.statusconf.color, px, py,
+                     g.status.batstate.charge_percent);
+}
+
 static void render(GContext *ctx)
 {
     GBitmap *bmp = graphics_capture_frame_buffer(ctx);
@@ -428,30 +458,8 @@ static void render(GContext *ctx)
             blocked[sector(hour.dx, hour.dy)] = 1;
             blocked[sector(min.dx, min.dy)] = 1;
             int first = sector(-dx, -dy);
-            int i;
-            for (i = 0; i < 4; ++i)
-                if (!blocked[(first + i) % 4])
-                    break;
-            int s = (i + first) % 4;
 
-            int px = w2 + sector_x(s) * r;
-            int py = h2 + sector_y(s) * r;
-
-            if (show_disconnected())
-            {
-                draw_disconnected(bmp, g.scanlines, g.statusconf.color, px, py);
-                blocked[s] = 2;
-                for (i = 0; i < 4; ++i)
-                    if (blocked[(first + i) % 4] < 2)
-                        break;
-                s = (i + first) % 4;
-                px = w2 + sector_x(s) * r;
-                py = h2 + sector_y(s) * r;
-            }
-
-            if (show_battery())
-                draw_battery(bmp, g.scanlines, g.statusconf.color, px, py,
-                             g.status.batstate.charge_percent);
+            draw_status(bmp, w2, h2, r, blocked, first);
         }
     }
 
