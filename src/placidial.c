@@ -461,6 +461,7 @@ static void tick_handler(struct tm *t, TimeUnits units_changed)
     if (g.showsec > 0 && --g.showsec == 0)
         tick_timer_service_subscribe(MINUTE_UNIT, tick_handler);
     update_time(t);
+    g.status.batstate = battery_state_service_peek();
     layer_mark_dirty(window_get_root_layer(g.window));
 }
 
@@ -637,13 +638,6 @@ static void message_received(DictionaryIterator *iter, void *context)
     layer_mark_dirty(window_get_root_layer(g.window));
 }
 
-static void battery_handler(BatteryChargeState charge)
-{
-    APP_LOG(APP_LOG_LEVEL_DEBUG, "battery: %u%%",
-            (unsigned)charge.charge_percent);
-    g.status.batstate = charge;
-}
-
 static void connection_handler(bool connected)
 {
     APP_LOG(APP_LOG_LEVEL_DEBUG, "bt: %s",
@@ -673,8 +667,6 @@ static void window_load(Window *window)
     tick_timer_service_subscribe(g.showsec ? SECOND_UNIT : MINUTE_UNIT,
                                  tick_handler);
     g.scanlines = NULL;
-
-    battery_state_service_subscribe(battery_handler);
     g.status.batstate = battery_state_service_peek();
 
     g.status.connected = connection_service_peek_pebble_app_connection();
