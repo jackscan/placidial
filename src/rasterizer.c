@@ -424,7 +424,7 @@ void draw_digit(struct GBitmap *bmp, uint8_t color, int x, int y, int n)
 void draw_disconnected(struct GBitmap *bmp, struct scanline *scanlines,
                        uint8_t color, int cx, int cy)
 {
-    static const uint32_t bitmask[] = {
+    static const uint16_t bitmask[] = {
         0b0000001111000000,
         0b0000011111000000,
         0b0000111111000000,
@@ -450,7 +450,7 @@ void draw_disconnected(struct GBitmap *bmp, struct scanline *scanlines,
         0b0000001111000000,
     };
 
-    int w = 32;
+    int w = 16;
 
 
     int h = ARRAY_LENGTH(bitmask);
@@ -460,7 +460,7 @@ void draw_disconnected(struct GBitmap *bmp, struct scanline *scanlines,
 
     for (int r = 0; r < h; ++r, ++y)
     {
-        uint32_t mask = bitmask[r];
+        uint16_t mask = bitmask[r];
         uint8_t *line = gbitmap_get_data_row_info(bmp, y).data;
         for (int j = 0; mask; ++j, mask >>= 1)
             if (mask & 0x1)
