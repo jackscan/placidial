@@ -36,6 +36,7 @@ enum
     CENTER_KEY,
     MARKER_KEY,
     DAYCOLORS_KEY,
+    STATUSCONF_KEY,
     NUM_KEYS
 };
 
@@ -388,9 +389,6 @@ static void render(GContext *ctx)
             if (show_battery())
                 draw_battery(bmp, g.scanlines, g.statusconf.color, px, py,
                              g.status.batstate.charge_percent);
-
-
-            // draw_status(bmp, px, py);
         }
     }
 
@@ -530,6 +528,13 @@ static void read_settings(void)
                 g.daycolors.dayofmonth, g.daycolors.weekday,
                 g.daycolors.sunday, g.daycolors.today);
     }
+    if (persist_exists(STATUSCONF_KEY))
+    {
+        persist_read_data(STATUSCONF_KEY, &g.statusconf, sizeof(g.statusconf));
+        APP_LOG(APP_LOG_LEVEL_DEBUG, "statusconf: 0x%x, %d, 0x%x, %d",
+                g.statusconf.color, g.statusconf.showconn,
+                g.statusconf.vibepattern, g.statusconf.warnlevel);
+    }
 }
 
 static void save_settings(void)
@@ -545,6 +550,7 @@ static void save_settings(void)
     persist_write_data(CENTER_KEY, &g.center, sizeof(g.center));
     persist_write_data(MARKER_KEY, &g.marker, sizeof(g.marker));
     persist_write_data(DAYCOLORS_KEY, &g.daycolors, sizeof(g.daycolors));
+    persist_write_data(STATUSCONF_KEY, &g.statusconf, sizeof(g.statusconf));
 }
 
 static inline int32_t clamp(int32_t val, int32_t max)
@@ -617,6 +623,13 @@ static void message_received(DictionaryIterator *iter, void *context)
         g.daycolors.weekday = (t->value->uint32 >> 16) & 0xFF;
         g.daycolors.sunday = (t->value->uint32 >> 8) & 0xFF;
         g.daycolors.today = t->value->uint32 & 0xFF;
+    }
+    if ((t = dict_find(iter, STATUSCONF_KEY))) {
+        APP_LOG(APP_LOG_LEVEL_DEBUG, "statusconf: 0x%x", (int)t->value->uint32);
+        g.statusconf.showconn = ((t->value->uint32 >> 24) & 0xFF) != 0;
+        g.statusconf.vibepattern = (t->value->uint32 >> 16) & 0xFF;
+        g.statusconf.warnlevel = (t->value->uint32 >> 8) & 0xFF;
+        g.statusconf.color = t->value->uint32 & 0xFF;
     }
 
     save_settings();

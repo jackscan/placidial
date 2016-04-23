@@ -21,7 +21,8 @@
     "sec": 6,
     "center": 7,
     "marker": 8,
-    "daycolors": 9
+    "daycolors": 9,
+    "statusconf": 10
   },
   "resources": {
     "media": []
