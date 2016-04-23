@@ -37,6 +37,7 @@ enum
     MARKER_KEY,
     DAYCOLORS_KEY,
     STATUSCONF_KEY,
+    DIALNUMBERS_KEY,
     NUM_KEYS
 };
 
@@ -81,6 +82,11 @@ struct
     struct {
         int32_t w, h;
     } marker;
+
+    struct {
+        uint8_t col;
+        bool show;
+    } dialnumbers;
 
     struct {
         BatteryChargeState batstate;
@@ -165,18 +171,75 @@ static inline bool show_status(void)
     return show_disconnected() || show_battery();
 }
 
+static inline void update_scanlines(struct scanline *scanlines,
+                                    int y0, int y1, int x0, int x1)
+{
+    int start = x0 >> 2;
+    int end = (x1 + 3) >> 2;
+    for (int y = y0; y < y1; ++y)
+    {
+        struct scanline *line = scanlines + y;
+        if (line->start > start) line->start = start;
+        if (line->end < end) line->end = end;
+    }
+}
+
+static void draw_dial_digits(GBitmap *bmp, int x, int y, int n, bool pad)
+{
+    int y0 = (y - SMALL_DIGIT_HEIGHT / 2);
+    int d10 = n / 10;
+    int d01 = n - d10 * 10;
+
+    if (!pad && n == 0)
+    {
+        d10 = 1;
+        d01 = 2;
+    }
+
+    if (pad || d10 != 0)
+    {
+        int spc = SMALL_DIGIT_WIDTH / 3;
+        int x0 = (x - SMALL_DIGIT_WIDTH - spc / 2);
+        draw_small_digit(bmp, g.dialnumbers.col, x0, y0, d10);
+        draw_small_digit(bmp, g.dialnumbers.col,
+                         x0 + SMALL_DIGIT_WIDTH + spc, y0, d01);
+        update_scanlines(g.scanlines, y0, y0 + SMALL_DIGIT_HEIGHT,
+                         x0, x0 + 2 * SMALL_DIGIT_WIDTH + spc);
+    }
+    else
+    {
+        int x0 = (x - SMALL_DIGIT_WIDTH /2);
+        draw_small_digit(bmp, g.dialnumbers.col, x0, y0, d01);
+        update_scanlines(g.scanlines, y0, y0 + SMALL_DIGIT_HEIGHT,
+                         x0, x0 + SMALL_DIGIT_WIDTH);
+    }
+}
+
 static void draw_marker(GBitmap *bmp, uint8_t col,
-                        int cx, int cy, int a, int r, int s)
+                        int cx, int cy, int a, int r, int s, int n, bool pad)
 {
     int32_t sina = sin_lookup(a);
     int32_t cosa = cos_lookup(a);
-    int32_t px = cx + sina * s / TRIG_MAX_RATIO;
-    int32_t py = cy - cosa * s / TRIG_MAX_RATIO;
-    int32_t dx = -sina * fixed(256) / TRIG_MAX_RATIO;
-    int32_t dy = cosa * fixed(256) / TRIG_MAX_RATIO;
 
-    draw_rect(bmp, g.scanlines, col, px, py, dx, dy, r,
-              g.marker.w / 2, g.outline);
+    if (g.marker.h > 0 && g.marker.w > 0)
+    {
+        int32_t px = cx + sina * s / TRIG_MAX_RATIO;
+        int32_t py = cy - cosa * s / TRIG_MAX_RATIO;
+        int32_t dx = -sina * fixed(256) / TRIG_MAX_RATIO;
+        int32_t dy = cosa * fixed(256) / TRIG_MAX_RATIO;
+
+        draw_rect(bmp, g.scanlines, col, px, py, dx, dy, r,
+                  g.marker.w / 2, g.outline);
+    }
+
+    if (g.dialnumbers.show && n >= 0)
+    {
+        int32_t t = (s - fixed(11) - r);
+        int32_t half = 1 << (FIXED_SHIFT - 1);
+        int nx = (cx + sina * t / TRIG_MAX_RATIO + half) >> FIXED_SHIFT;
+        int ny = (cy - cosa * t / TRIG_MAX_RATIO + half) >> FIXED_SHIFT;
+        draw_dial_digits(bmp, nx, ny, n, pad);
+    }
 }
 
 static void update_time(struct tm *t)
@@ -405,16 +468,19 @@ static void render(GContext *ctx)
         int32_t s = mr * 15 / 16;
         int32_t r = g.marker.h;
 
+        int minmark = ((g.min + 2) % 60) * 12 / 60;
+        int hourmark = ((g.hour * 60 + g.min + 30) % 720) * 12 / 720;
+
         int32_t c =
             g.showsec ? ((g.sec + 2) % 60) * 12 / 60 * TRIG_MAX_ANGLE / 12 : -1;
-        int32_t a = ((g.min + 2) % 60) * 12 / 60 * TRIG_MAX_ANGLE / 12;
-        int32_t b =
-            ((g.hour * 60 + g.min + 30) % 720) * 12 / 720 * TRIG_MAX_ANGLE / 12;
+        int32_t a = minmark * TRIG_MAX_ANGLE / 12;
+        int32_t b = hourmark * TRIG_MAX_ANGLE / 12;
 
-        draw_marker(bmp, g.min_hand.col, cx, cy, a, r, s);
-        if (b != a) draw_marker(bmp, g.hour_hand.col, cx, cy, b, r, s);
+        draw_marker(bmp, g.min_hand.col, cx, cy, a, r, s, minmark * 5, true);
+        if (b != a)
+            draw_marker(bmp, g.hour_hand.col, cx, cy, b, r, s, hourmark, false);
         if (c >= 0 && c != a && c != b)
-            draw_marker(bmp, g.sec_hand.col, cx, cy, c, r, s);
+            draw_marker(bmp, g.sec_hand.col, cx, cy, c, r, s, -1, false);
     }
 
     // draw hour hand
@@ -536,6 +602,13 @@ static void read_settings(void)
                 g.statusconf.color, g.statusconf.showconn,
                 g.statusconf.vibepattern, g.statusconf.warnlevel);
     }
+    if (persist_exists(DIALNUMBERS_KEY))
+    {
+        persist_read_data(DIALNUMBERS_KEY, &g.dialnumbers,
+                          sizeof(g.dialnumbers));
+        APP_LOG(APP_LOG_LEVEL_DEBUG, "dialnumbers: %d, 0x%x",
+                g.dialnumbers.show, g.dialnumbers.col);
+    }
 }
 
 static void save_settings(void)
@@ -552,6 +625,7 @@ static void save_settings(void)
     persist_write_data(MARKER_KEY, &g.marker, sizeof(g.marker));
     persist_write_data(DAYCOLORS_KEY, &g.daycolors, sizeof(g.daycolors));
     persist_write_data(STATUSCONF_KEY, &g.statusconf, sizeof(g.statusconf));
+    persist_write_data(DIALNUMBERS_KEY, &g.dialnumbers, sizeof(g.dialnumbers));
 }
 
 static inline int32_t clamp(int32_t val, int32_t max)
@@ -631,6 +705,11 @@ static void message_received(DictionaryIterator *iter, void *context)
         g.statusconf.vibepattern = (t->value->uint32 >> 16) & 0xFF;
         g.statusconf.warnlevel = (t->value->uint32 >> 8) & 0xFF;
         g.statusconf.color = t->value->uint32 & 0xFF;
+    }
+    if ((t = dict_find(iter, DIALNUMBERS_KEY))) {
+        APP_LOG(APP_LOG_LEVEL_DEBUG, "dialnums: 0x%x", (int)t->value->uint32);
+        g.dialnumbers.show = ((t->value->uint32 >> 8) & 0xFF) != 0;
+        g.dialnumbers.col = t->value->uint32 & 0xFF;
     }
 
     save_settings();
@@ -722,6 +801,8 @@ static void init()
     g.statusconf.showconn = true;
     g.statusconf.warnlevel = 10;
     g.statusconf.vibepattern = 3;
+    g.dialnumbers.col = 0xAA;
+    g.dialnumbers.show = false;
 
     read_settings();
 

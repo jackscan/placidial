@@ -418,7 +418,35 @@ void draw_digit(struct GBitmap *bmp, uint8_t color, int x, int y, int n)
                 if (mask & 1) line[s + j] = col4;
         }
     }
+}
 
+void draw_small_digit(struct GBitmap *bmp, uint8_t color, int x, int y, int n)
+{
+    static const uint32_t digitmask[5] = {
+        07777717737,
+        05541114425,
+        07747756725,
+        04545474125,
+        07747747777,
+    };
+
+    int w = 2;
+    int h = 2;
+    int n3 = n * 3;
+
+    for (int r = 0; r < 5; ++r)
+    {
+        int k = r != 2 ? h : h - 1;
+        for (int i = 0; i < k; ++i, ++y)
+        {
+            uint32_t mask = (digitmask[r] >> n3) & 0x7;
+            uint8_t *line = gbitmap_get_data_row_info(bmp, y).data;
+            for (int j = 0; mask; ++j, mask >>= 1)
+                if (mask & 1)
+                    for (int b = 0; b < w; ++b)
+                        line[x + j * w + b] = color;
+        }
+    }
 }
 
 void draw_disconnected(struct GBitmap *bmp, struct scanline *scanlines,
