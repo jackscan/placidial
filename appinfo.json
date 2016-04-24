@@ -24,7 +24,8 @@
     "daycolors": 9,
     "statusconf": 10,
     "dialnum": 11,
-    "hourbelow": 12
+    "hourbelow": 12,
+    "mintick": 13
   },
   "resources": {
     "media": []

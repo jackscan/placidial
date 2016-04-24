@@ -34,11 +34,12 @@ enum
     MIN_KEY,
     SEC_KEY,
     CENTER_KEY,
-    MARKER_KEY,
+    HOURTICK_KEY,
     DAYCOLORS_KEY,
     STATUSCONF_KEY,
     DIALNUMBERS_KEY,
     HOURBELOW_KEY,
+    MINTICK_KEY,
     NUM_KEYS
 };
 
@@ -46,6 +47,13 @@ struct hand_conf
 {
     int32_t w, r0, r1;
     uint8_t col;
+};
+
+struct tick_conf
+{
+    int32_t w, h;
+    uint8_t col;
+    uint8_t show;
 };
 
 struct
@@ -84,13 +92,11 @@ struct
 
     struct hand_conf hour_hand, min_hand, sec_hand;
 
-    struct {
-        int32_t w, h;
-    } marker;
+    struct tick_conf hour_tick, min_tick;
 
     struct {
         uint8_t col;
-        bool show;
+        uint8_t show;
     } dialnumbers;
 
     struct {
@@ -220,31 +226,34 @@ static void draw_dial_digits(GBitmap *bmp, int x, int y, int n, bool pad)
     }
 }
 
-static void draw_marker(GBitmap *bmp, uint8_t col,
-                        int cx, int cy, int a, int r, int s, int n, bool pad)
+static void draw_tick(GBitmap *bmp, struct tick_conf *conf,
+                      int cx, int cy, int a, int s)
 {
-    int32_t sina = sin_lookup(a);
-    int32_t cosa = cos_lookup(a);
-
-    if (g.marker.h > 0 && g.marker.w > 0)
+    if (conf->h > 0 && conf->w > 0)
     {
+        int32_t sina = sin_lookup(a);
+        int32_t cosa = cos_lookup(a);
+
         int32_t px = cx + sina * s / TRIG_MAX_RATIO;
         int32_t py = cy - cosa * s / TRIG_MAX_RATIO;
         int32_t dx = -sina * fixed(256) / TRIG_MAX_RATIO;
         int32_t dy = cosa * fixed(256) / TRIG_MAX_RATIO;
 
-        draw_rect(bmp, g.scanlines, col, px, py, dx, dy, r,
-                  g.marker.w / 2, g.outline);
+        draw_rect(bmp, g.scanlines, conf->col, px, py, dx, dy, conf->h,
+                  conf->w / 2, g.outline);
     }
+}
 
-    if (g.dialnumbers.show && n >= 0)
-    {
-        int32_t t = (s - fixed(11) - r);
-        int32_t half = 1 << (FIXED_SHIFT - 1);
-        int nx = (cx + sina * t / TRIG_MAX_RATIO + half) >> FIXED_SHIFT;
-        int ny = (cy - cosa * t / TRIG_MAX_RATIO + half) >> FIXED_SHIFT;
-        draw_dial_digits(bmp, nx, ny, n, pad);
-    }
+static void draw_dial_number(GBitmap *bmp, int n, bool pad,
+                             int cx, int cy, int a, int32_t r)
+{
+    int32_t sina = sin_lookup(a);
+    int32_t cosa = cos_lookup(a);
+    int32_t t = r - fixed(11);
+    int32_t half = 1 << (FIXED_SHIFT - 1);
+    int nx = (cx + sina * t / TRIG_MAX_RATIO + half) >> FIXED_SHIFT;
+    int ny = (cy - cosa * t / TRIG_MAX_RATIO + half) >> FIXED_SHIFT;
+    draw_dial_digits(bmp, nx, ny, n, pad);
 }
 
 static void update_time(struct tm *t)
@@ -489,21 +498,73 @@ static void render(GContext *ctx)
     // dial marker
     {
         int32_t s = mr * 15 / 16;
-        int32_t r = g.marker.h;
 
-        int minmark = ((g.min + 2) % 60) * 12 / 60;
         int hourmark = ((g.hour * 60 + g.min + 30) % 720) * 12 / 720;
-
         int32_t c =
             g.showsec ? ((g.sec + 2) % 60) * 12 / 60 * TRIG_MAX_ANGLE / 12 : -1;
-        int32_t a = minmark * TRIG_MAX_ANGLE / 12;
-        int32_t b = hourmark * TRIG_MAX_ANGLE / 12;
+        int32_t b = g.hour_tick.show ? hourmark * TRIG_MAX_ANGLE / 12 : -1;
+        if (c == b) c = -1;
 
-        draw_marker(bmp, g.min_hand.col, cx, cy, a, r, s, minmark * 5, true);
-        if (b != a)
-            draw_marker(bmp, g.hour_hand.col, cx, cy, b, r, s, hourmark, false);
-        if (c >= 0 && c != a && c != b)
-            draw_marker(bmp, g.sec_hand.col, cx, cy, c, r, s, -1, false);
+        {
+            int minmark = (g.min + 2) / 5;
+            int a = (minmark * TRIG_MAX_ANGLE / 12) % TRIG_MAX_ANGLE;
+            if (b == a || b == a) b = -1;
+            if (c == a || c == a) c = -1;
+
+            if (g.hour_tick.show)
+                draw_tick(bmp, &g.hour_tick, cx, cy, a, s);
+
+            if (g.min_tick.show)
+            {
+                int mm = minmark * 5;
+                int m1 = g.min < mm ? g.min : mm + 1;
+                int m2 = g.min < mm ? mm - 1 : g.min;
+
+                for (int i = m1; i <= m2; ++i)
+                {
+                    int32_t a = (i * TRIG_MAX_ANGLE / 60) % TRIG_MAX_ANGLE;
+                    draw_tick(bmp, &g.min_tick, cx, cy, a, s);
+                }
+            }
+        }
+
+        if (b >= 0)
+            draw_tick(bmp, &g.hour_tick, cx, cy, b, s);
+        if (c >= 0)
+        {
+            // workaround for missing sec_tick config
+            struct tick_conf sec_tick = g.hour_tick;
+            sec_tick.col = g.sec_hand.col;
+            draw_tick(bmp, &sec_tick, cx, cy, c, s);
+        }
+
+        if (g.dialnumbers.show)
+        {
+            int b = -1;
+            int h = -1;
+
+            if (g.dialnumbers.show & 0x1)
+            {
+                int f = clock_is_24h_style() ? 24 : 12;
+                h = ((g.hour * 60 + g.min + 30) / 60) % f;
+                if (h == 0) h = f;
+                b = (h % 12) * TRIG_MAX_ANGLE / 12;
+            }
+
+            int32_t sn = g.hour_tick.show ? s - g.hour_tick.h : s;
+
+            if (g.dialnumbers.show & 0x2)
+            {
+                int m = (((g.min + 2) / 5) * 5) % 60;
+                int a = m * TRIG_MAX_ANGLE / 60;
+                draw_dial_number(bmp, m, true, cx, cy, a, sn);
+                if (b == a) b = -1;
+            }
+
+            if (b >= 0)
+                draw_dial_number(bmp, h, false, cx, cy, b, sn);
+        }
+
     }
 
     if (g.hourhand_below)
@@ -599,11 +660,18 @@ static void read_settings(void)
                 (int)g.center[0].r, g.center[0].col,
                 (int)g.center[1].r, g.center[1].col);
     }
-    if (persist_exists(MARKER_KEY))
+    if (persist_exists(HOURTICK_KEY))
     {
-        persist_read_data(MARKER_KEY, &g.marker, sizeof(g.marker));
-        APP_LOG(APP_LOG_LEVEL_DEBUG, "marker: %d, %d",
-                (int)g.marker.w, (int)g.marker.h);
+        persist_read_data(HOURTICK_KEY, &g.hour_tick, sizeof(g.hour_tick));
+        // legacy support
+        if (g.hour_tick.col == 0)
+        {
+            g.hour_tick.show = g.hour_tick.w > 0 && g.hour_tick.h > 0;
+            g.hour_tick.col = g.hour_hand.col;
+        }
+        APP_LOG(APP_LOG_LEVEL_DEBUG, "hourtick: %d, %d, %x, %d",
+                (int)g.hour_tick.w, (int)g.hour_tick.h,
+                g.hour_tick.col, (int)g.hour_tick.show);
     }
     if (persist_exists(DAYCOLORS_KEY))
     {
@@ -626,6 +694,13 @@ static void read_settings(void)
         APP_LOG(APP_LOG_LEVEL_DEBUG, "dialnumbers: %d, 0x%x",
                 g.dialnumbers.show, g.dialnumbers.col);
     }
+    if (persist_exists(MINTICK_KEY))
+    {
+        persist_read_data(MINTICK_KEY, &g.min_tick, sizeof(g.min_tick));
+        APP_LOG(APP_LOG_LEVEL_DEBUG, "mintick: %d, %d, %x, %d",
+                (int)g.min_tick.w, (int)g.min_tick.h,
+                g.min_tick.col, (int)g.min_tick.show);
+    }
 }
 
 static void save_settings(void)
@@ -640,10 +715,11 @@ static void save_settings(void)
     persist_write_data(MIN_KEY, &g.min_hand, sizeof(g.min_hand));
     persist_write_data(SEC_KEY, &g.sec_hand, sizeof(g.sec_hand));
     persist_write_data(CENTER_KEY, &g.center, sizeof(g.center));
-    persist_write_data(MARKER_KEY, &g.marker, sizeof(g.marker));
+    persist_write_data(HOURTICK_KEY, &g.hour_tick, sizeof(g.hour_tick));
     persist_write_data(DAYCOLORS_KEY, &g.daycolors, sizeof(g.daycolors));
     persist_write_data(STATUSCONF_KEY, &g.statusconf, sizeof(g.statusconf));
     persist_write_data(DIALNUMBERS_KEY, &g.dialnumbers, sizeof(g.dialnumbers));
+    persist_write_data(MINTICK_KEY, &g.min_tick, sizeof(g.min_tick));
 }
 
 static inline int32_t clamp(int32_t val, int32_t max)
@@ -705,10 +781,12 @@ static void message_received(DictionaryIterator *iter, void *context)
             clamp((t->value->int32 >> 8) & 0xFF, 32) << (FIXED_SHIFT - 1);
         g.center[1].col = t->value->uint32 & 0xFF;
     }
-    if ((t = dict_find(iter, MARKER_KEY))) {
-        APP_LOG(APP_LOG_LEVEL_DEBUG, "marker: 0x%x", (int)t->value->uint32);
-        g.marker.w = fixed(clamp((t->value->int32 >> 8) & 0xFF, 16));
-        g.marker.h = fixed(clamp(t->value->int32 & 0xFF, 32));
+    if ((t = dict_find(iter, HOURTICK_KEY))) {
+        APP_LOG(APP_LOG_LEVEL_DEBUG, "hourtick: 0x%x", (int)t->value->uint32);
+        g.hour_tick.show = ((t->value->uint32 >> 24) & 0xFF);
+        g.hour_tick.col = ((t->value->uint32 >> 16) & 0xFF);
+        g.hour_tick.w = fixed(clamp((t->value->int32 >> 8) & 0xFF, 16));
+        g.hour_tick.h = fixed(clamp(t->value->int32 & 0xFF, 32));
     }
     if ((t = dict_find(iter, DAYCOLORS_KEY))) {
         APP_LOG(APP_LOG_LEVEL_DEBUG, "daycolors: 0x%x", (int)t->value->uint32);
@@ -726,12 +804,19 @@ static void message_received(DictionaryIterator *iter, void *context)
     }
     if ((t = dict_find(iter, DIALNUMBERS_KEY))) {
         APP_LOG(APP_LOG_LEVEL_DEBUG, "dialnums: 0x%x", (int)t->value->uint32);
-        g.dialnumbers.show = ((t->value->uint32 >> 8) & 0xFF) != 0;
+        g.dialnumbers.show = (t->value->uint32 >> 8) & 0xFF;
         g.dialnumbers.col = t->value->uint32 & 0xFF;
     }
     if ((t = dict_find(iter, HOURBELOW_KEY))) {
         APP_LOG(APP_LOG_LEVEL_DEBUG, "hourbelow: %d", (int)t->value->int32);
         g.hourhand_below = t->value->int32 != 0;
+    }
+    if ((t = dict_find(iter, MINTICK_KEY))) {
+        APP_LOG(APP_LOG_LEVEL_DEBUG, "mintick: 0x%x", (int)t->value->uint32);
+        g.min_tick.show = ((t->value->uint32 >> 24) & 0xFF);
+        g.min_tick.col = ((t->value->uint32 >> 16) & 0xFF);
+        g.min_tick.w = fixed(clamp((t->value->int32 >> 8) & 0xFF, 16));
+        g.min_tick.h = fixed(clamp(t->value->int32 & 0xFF, 32));
     }
 
     save_settings();
@@ -810,8 +895,14 @@ static void init()
     g.hour_hand.col = 0xFF;
     g.hour_hand.w = fixed(8);
     g.hourhand_below = false;
-    g.marker.w = fixed(4);
-    g.marker.h = fixed(5);
+    g.hour_tick.w = fixed(4);
+    g.hour_tick.h = fixed(5);
+    g.hour_tick.col = 0xFF;
+    g.hour_tick.show = 1;
+    g.min_tick.w = fixed(3);
+    g.min_tick.h = fixed(4);
+    g.min_tick.col = 0xFF;
+    g.min_tick.show = 0;
     g.center[0].col = 0xFF;
     g.center[0].r = fixed(7);
     g.center[1].col = 0xF0;
@@ -825,7 +916,7 @@ static void init()
     g.statusconf.warnlevel = 10;
     g.statusconf.vibepattern = 3;
     g.dialnumbers.col = 0xAA;
-    g.dialnumbers.show = false;
+    g.dialnumbers.show = 0;
 
     read_settings();
 
