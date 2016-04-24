@@ -38,7 +38,14 @@ enum
     DAYCOLORS_KEY,
     STATUSCONF_KEY,
     DIALNUMBERS_KEY,
+    HOURBELOW_KEY,
     NUM_KEYS
+};
+
+struct hand_conf
+{
+    int32_t w, r0, r1;
+    uint8_t col;
 };
 
 struct
@@ -58,6 +65,7 @@ struct
     } center[2];
 
     bool outline;
+    bool hourhand_below;
 
     struct {
         int ofweek, ofmonth;
@@ -74,10 +82,7 @@ struct
         uint8_t today;
     } daycolors;
 
-    struct {
-        int32_t w, r0, r1;
-        uint8_t col;
-    } hour_hand, min_hand, sec_hand;
+    struct hand_conf hour_hand, min_hand, sec_hand;
 
     struct {
         int32_t w, h;
@@ -307,6 +312,16 @@ static void draw_status(GBitmap *bmp, int cx, int cy, int r,
                      g.status.batstate.charge_percent);
 }
 
+static void draw_hand(struct GBitmap *bmp,struct hand_conf *conf, int32_t mr,
+                      int32_t cx, int32_t cy, int32_t dx, int32_t dy)
+{
+    int32_t px = cx - dx * mr * conf->r0 / (fixed(256) * 256);
+    int32_t py = cy - dy * mr * conf->r0 / (fixed(256) * 256);
+    int32_t len = mr * (conf->r1 + conf->r0) / 256;
+    draw_rect(bmp, g.scanlines, conf->col, px, py, dx, dy, len, conf->w / 2,
+              g.outline);
+}
+
 static void render(GContext *ctx)
 {
     GBitmap *bmp = graphics_capture_frame_buffer(ctx);
@@ -491,33 +506,22 @@ static void render(GContext *ctx)
             draw_marker(bmp, g.sec_hand.col, cx, cy, c, r, s, -1, false);
     }
 
-    // draw hour hand
+    if (g.hourhand_below)
     {
-        int32_t px = cx - hour.dx * mr * g.hour_hand.r0 / (fixed(256) * 256);
-        int32_t py = cy - hour.dy * mr * g.hour_hand.r0 / (fixed(256) * 256);
-        int32_t len = mr * (g.hour_hand.r1 + g.hour_hand.r0) / 256;
-        draw_rect(bmp, g.scanlines, g.hour_hand.col, px, py,
-                           hour.dx, hour.dy, len, g.hour_hand.w / 2, g.outline);
+        draw_hand(bmp, &g.hour_hand, mr, cx, cy, hour.dx, hour.dy);
+        draw_hand(bmp, &g.min_hand, mr, cx, cy, min.dx, min.dy);
     }
-
-    // draw minute hand
+    else
     {
-        int32_t px = cx - min.dx * mr * g.min_hand.r0 / (fixed(256) * 256);
-        int32_t py = cy - min.dy * mr * g.min_hand.r0 / (fixed(256) * 256);
-        int32_t len = mr * (g.min_hand.r1 + g.min_hand.r0) / 256;
-        draw_rect(bmp, g.scanlines, g.min_hand.col, px, py,
-                           min.dx, min.dy, len, g.min_hand.w / 2, g.outline);
+        draw_hand(bmp, &g.min_hand, mr, cx, cy, min.dx, min.dy);
+        draw_hand(bmp, &g.hour_hand, mr, cx, cy, hour.dx, hour.dy);
     }
 
     draw_circle(bmp, g.center[0].col, cx, cy, g.center[0].r, g.outline);
 
     if (g.showsec)
     {
-        int32_t px = cx - sec.dx * mr * g.sec_hand.r0 / (fixed(256) * 256);
-        int32_t py = cy - sec.dy * mr * g.sec_hand.r0 / (fixed(256) * 256);
-        int32_t len = mr * (g.sec_hand.r1 + g.sec_hand.r0) / 256;
-        draw_rect(bmp, g.scanlines, g.sec_hand.col,
-                  px, py, sec.dx, sec.dy, len, g.sec_hand.w / 2, g.outline);
+        draw_hand(bmp, &g.sec_hand, mr, cx, cy, sec.dx, sec.dy);
         draw_circle(bmp, g.center[1].col, cx, cy, g.center[1].r, g.outline);
     }
 
@@ -556,6 +560,11 @@ static void read_settings(void)
     {
         g.outline = persist_read_bool(OUTLINE_KEY);
         APP_LOG(APP_LOG_LEVEL_DEBUG, "outline: %i", g.outline);
+    }
+    if (persist_exists(HOURBELOW_KEY))
+    {
+        g.hourhand_below = persist_read_bool(HOURBELOW_KEY);
+        APP_LOG(APP_LOG_LEVEL_DEBUG, "hourbelow: %i", g.hourhand_below);
     }
     if (persist_exists(BGCOL_KEY))
     {
@@ -625,6 +634,7 @@ static void save_settings(void)
     persist_write_bool(SHOWSEC_KEY, g.showsec != 0);
     persist_write_bool(SHOWDAY_KEY, g.day.show);
     persist_write_bool(OUTLINE_KEY, g.outline);
+    persist_write_bool(HOURBELOW_KEY, g.hourhand_below);
     persist_write_int(BGCOL_KEY, (int)(unsigned)g.bgcol);
     persist_write_data(HOUR_KEY, &g.hour_hand, sizeof(g.hour_hand));
     persist_write_data(MIN_KEY, &g.min_hand, sizeof(g.min_hand));
@@ -719,6 +729,10 @@ static void message_received(DictionaryIterator *iter, void *context)
         g.dialnumbers.show = ((t->value->uint32 >> 8) & 0xFF) != 0;
         g.dialnumbers.col = t->value->uint32 & 0xFF;
     }
+    if ((t = dict_find(iter, HOURBELOW_KEY))) {
+        APP_LOG(APP_LOG_LEVEL_DEBUG, "hourbelow: %d", (int)t->value->int32);
+        g.hourhand_below = t->value->int32 != 0;
+    }
 
     save_settings();
 
@@ -795,6 +809,7 @@ static void init()
     g.hour_hand.r1 = 160;
     g.hour_hand.col = 0xFF;
     g.hour_hand.w = fixed(8);
+    g.hourhand_below = false;
     g.marker.w = fixed(4);
     g.marker.h = fixed(5);
     g.center[0].col = 0xFF;

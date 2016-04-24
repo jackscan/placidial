@@ -23,7 +23,8 @@
     "marker": 8,
     "daycolors": 9,
     "statusconf": 10,
-    "dialnum": 11
+    "dialnum": 11,
+    "hourbelow": 12
   },
   "resources": {
     "media": []
