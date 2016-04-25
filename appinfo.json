@@ -28,6 +28,13 @@
     "mintick": 13
   },
   "resources": {
-    "media": []
+    "media": [
+        {
+            "file": "images/menuicon.png",
+            "menuIcon": true,
+            "name": "IMAGE_ICON",
+            "type": "png"
+        }
+    ]
   }
 }
