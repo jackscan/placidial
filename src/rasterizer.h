@@ -54,6 +54,9 @@ void draw_box(struct GBitmap *bmp, uint8_t color, int x, int y, int w, int h);
 void draw_rect(struct GBitmap *bmp, struct scanline *scanlines,
                uint8_t color, int32_t px, int32_t py,
                int32_t dx, int32_t dy, int32_t len, int32_t w, bool outline);
+void draw_bg_rect(struct GBitmap *bmp, struct scanline *scanlines,
+                  uint32_t colors, int32_t px, int32_t py,
+                  int32_t dx, int32_t dy, int32_t len, int32_t w);
 void draw_white_rect(struct GBitmap *bmp, struct scanline *scanlines,
                      int32_t px, int32_t py, int32_t dx, int32_t dy,
                      int32_t len, int32_t w);
@@ -69,6 +72,13 @@ void draw_battery(struct GBitmap *bmp, struct scanline *scanlines,
 static inline int32_t fixed(int i)
 {
    return (int32_t)i << FIXED_SHIFT;
+}
+
+static inline uint8_t blend(uint32_t x, uint32_t y, int a, int d)
+{
+    uint32_t b = ((x & 0x33) * (d - a) + (y & 0x33) * a);
+    uint32_t c = ((x & 0xCC) * (d - a) + ((y | 0xC0) & 0xCC) * a);
+    return (uint8_t)(((b & 0xCC) + (c & 0x330)) >> 2);
 }
 
 #endif

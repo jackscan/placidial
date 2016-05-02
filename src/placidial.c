@@ -112,6 +112,17 @@ struct
     } statusconf;
 } g;
 
+static inline uint32_t get_colors(uint8_t bg, uint8_t col)
+{
+    int od = g.outline ? 3 : 4;
+    uint32_t b = bg;
+    uint32_t c = col;
+    return (uint32_t)blend(b, c, 1, od)
+        | (((uint32_t)blend(b, c, 2, od)) << 8)
+        | (((uint32_t)blend(b, c, 3, od)) << 16)
+        | (c << 24);
+}
+
 static void draw_week(GBitmap *bmp, int x, int y)
 {
     const int w = 4;
@@ -239,8 +250,10 @@ static void draw_tick(GBitmap *bmp, struct tick_conf *conf,
         int32_t dx = -sina * fixed(256) / TRIG_MAX_RATIO;
         int32_t dy = cosa * fixed(256) / TRIG_MAX_RATIO;
 
-        draw_rect(bmp, g.scanlines, conf->col, px, py, dx, dy, conf->h,
-                  conf->w / 2, g.outline);
+        uint32_t colors = get_colors(g.bgcol, conf->col);
+
+        draw_bg_rect(bmp, g.scanlines, colors, px, py, dx, dy, conf->h,
+                     conf->w / 2);
     }
 }
 
@@ -322,13 +335,20 @@ static void draw_status(GBitmap *bmp, int cx, int cy, int r,
 }
 
 static void draw_hand(struct GBitmap *bmp,struct hand_conf *conf, int32_t mr,
-                      int32_t cx, int32_t cy, int32_t dx, int32_t dy)
+                      int32_t cx, int32_t cy, int32_t dx, int32_t dy, bool bg)
 {
     int32_t px = cx - dx * mr * conf->r0 / (fixed(256) * 256);
     int32_t py = cy - dy * mr * conf->r0 / (fixed(256) * 256);
     int32_t len = mr * (conf->r1 + conf->r0) / 256;
-    draw_rect(bmp, g.scanlines, conf->col, px, py, dx, dy, len, conf->w / 2,
-              g.outline);
+    if (bg)
+    {
+        uint32_t colors = get_colors(g.bgcol, conf->col);
+        draw_bg_rect(bmp, g.scanlines, colors, px, py, dx, dy, len,
+                     conf->w / 2);
+    }
+    else
+        draw_rect(bmp, g.scanlines, conf->col, px, py, dx, dy, len, conf->w / 2,
+                  g.outline);
 }
 
 static void render(GContext *ctx)
@@ -569,20 +589,20 @@ static void render(GContext *ctx)
 
     if (g.hourhand_below)
     {
-        draw_hand(bmp, &g.hour_hand, mr, cx, cy, hour.dx, hour.dy);
-        draw_hand(bmp, &g.min_hand, mr, cx, cy, min.dx, min.dy);
+        draw_hand(bmp, &g.hour_hand, mr, cx, cy, hour.dx, hour.dy, true);
+        draw_hand(bmp, &g.min_hand, mr, cx, cy, min.dx, min.dy, false);
     }
     else
     {
-        draw_hand(bmp, &g.min_hand, mr, cx, cy, min.dx, min.dy);
-        draw_hand(bmp, &g.hour_hand, mr, cx, cy, hour.dx, hour.dy);
+        draw_hand(bmp, &g.min_hand, mr, cx, cy, min.dx, min.dy, true);
+        draw_hand(bmp, &g.hour_hand, mr, cx, cy, hour.dx, hour.dy, false);
     }
 
     draw_circle(bmp, g.center[0].col, cx, cy, g.center[0].r, g.outline);
 
     if (g.showsec)
     {
-        draw_hand(bmp, &g.sec_hand, mr, cx, cy, sec.dx, sec.dy);
+        draw_hand(bmp, &g.sec_hand, mr, cx, cy, sec.dx, sec.dy, false);
         draw_circle(bmp, g.center[1].col, cx, cy, g.center[1].r, g.outline);
     }
 

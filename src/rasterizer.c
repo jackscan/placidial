@@ -48,13 +48,6 @@ static inline int32_t mini(int32_t a, int32_t b)
     return a < b ? a : b;
 }
 
-static inline uint8_t blend(uint32_t x, uint32_t y, int a, int d)
-{
-    uint32_t b = ((x & 0x33) * (d - a) + (y & 0x33) * a);
-    uint32_t c = ((x & 0xCC) * (d - a) + ((y | 0xC0) & 0xCC) * a);
-    return (uint8_t)(((b & 0xCC) + (c & 0x330)) >> 2);
-}
-
 void draw_box(struct GBitmap *bmp, uint8_t color, int x, int y, int w, int h)
 {
     for (int i = 0; i < h; ++i)
@@ -271,7 +264,7 @@ void draw_white_rect(struct GBitmap *bmp, struct scanline *scanlines,
     }
 }
 
-#define AA_STEP(mask, left) \
+#define AA_STEP(mask, left, bg) \
     int32_t d0 = d0s >> dshift; \
     int32_t d1 = d1s >> dshift; \
     d0s -= dys; \
@@ -283,9 +276,10 @@ void draw_white_rect(struct GBitmap *bmp, struct scanline *scanlines,
 \
     int a = (d * 4 / smooth) >> FIXED_SHIFT; \
     if (a <= 0) continue; \
-    if (a < 4) line[x] = blend(line[x], color, a, od)
+    if (a < 4 && bg) line[x] = (uint8_t)(colors >> (8 * (a - 1))); \
+    else if (a < 4) line[x] = blend(line[x], color, a, od)
 
-#define DRAW_RECT_LINES(y0, y1, rx, ry, mask) ({\
+#define DRAW_RECT_LINES(y0, y1, rx, ry, mask, bg) ({\
 \
     for (int y = y0; y < y1; ++y) \
     { \
@@ -332,7 +326,7 @@ void draw_white_rect(struct GBitmap *bmp, struct scanline *scanlines,
         int x; \
         for (x = ix0; x < ix1; ++x) \
         { \
-            AA_STEP(mask, true); \
+            AA_STEP(mask, true, bg); \
             else break; \
         } \
  \
@@ -343,29 +337,84 @@ void draw_white_rect(struct GBitmap *bmp, struct scanline *scanlines,
         d1s = (fixed(x) + half) * dx - pxdx + fydy; \
         for (; x < ix2; ++x) \
         { \
-            AA_STEP(mask, false); \
+            AA_STEP(mask, false, bg); \
             else line[x] = color; \
         } \
     } \
 })
 
-#define DRAW_RECT(y0, y1, y2, y3, rx, ry) ({\
+#define DRAW_RECT(y0, y1, y2, y3, rx, ry, bg) ({\
     if (y1 < y2) \
     { \
-        DRAW_RECT_LINES(y0, y1, rx, ry, 0x1); \
-        DRAW_RECT_LINES(y1, y2, rx, ry, 0); \
-        DRAW_RECT_LINES(y2, y3, rx, ry, 0x2); \
+        DRAW_RECT_LINES(y0, y1, rx, ry, 0x1, bg); \
+        DRAW_RECT_LINES(y1, y2, rx, ry, 0, bg); \
+        DRAW_RECT_LINES(y2, y3, rx, ry, 0x2, bg); \
     } \
     else \
     { \
-        DRAW_RECT_LINES(y0, y3, rx, ry, 0x3); \
+        DRAW_RECT_LINES(y0, y3, rx, ry, 0x3, bg); \
     } \
 })
+
+void draw_bg_rect(struct GBitmap *bmp, struct scanline *scanlines,
+                  uint32_t colors, int32_t px, int32_t py,
+                  int32_t dx, int32_t dy, int32_t len, int32_t w)
+{
+    uint8_t color = colors >> 24;
+
+    // length of (dx, dy) is assumed to be fixed(256)
+    const int dshift = FIXED_SHIFT + 8;
+
+    // (dx, dy) shall point downwards or right
+    if (dy < 0 || (dy == 0 && dx < 0))
+    {
+        px += (dx * len) >> dshift;
+        py += (dy * len) >> dshift;
+        dx = -dx;
+        dy = -dy;
+    }
+
+    int32_t half = (1 << (FIXED_SHIFT - 1));
+
+    int od = 4;
+    int smooth = 2;
+    int32_t fs2 = fixed(smooth)/2;
+    int32_t wi = w - fs2;
+    w += fs2;
+    int32_t s0 = -fs2;
+    int32_t s1 = len + fs2;
+    int32_t t0 = dx < 0 ? s0 + 2 * fs2 : s0;
+    int32_t t1 = dx < 0 ? s1 : s1 - 2 * fs2;
+
+    int32_t wdx = ((dx < 0 ? -dx : dx) * w) >> dshift;
+    int32_t sdy = (fs2 * dy) >> dshift;
+    int y0 = fixedfloor(py - wdx - sdy);
+    int y1 = fixedceil(py + wdx + sdy);
+    int y2 = fixedfloor(py + ((dy * len) >> dshift) - wdx - sdy);
+    int y3 = fixedceil(py + ((dy * len) >> dshift) + wdx + sdy);
+
+    int32_t ws0 = w << dshift;
+    int32_t ws1 = wi << dshift;
+    int32_t pxdy = px * dy;
+    int32_t pxdx = px * dx;
+
+    if (dy > 0 && dx < 0)
+        DRAW_RECT(y0, y1, y2, y3, -1, 1, true);
+    else if (dy > 0 && dx > 0)
+        DRAW_RECT(y0, y1, y2, y3, 1, 1, true);
+    else if (dy > 0)
+        DRAW_RECT(y0, y1, y2, y3, 0, 1, true);
+    else
+        DRAW_RECT(y0, y1, y2, y3, 1, 0, true);
+}
+
 
 void draw_rect(struct GBitmap *bmp, struct scanline *scanlines,
                uint8_t color, int32_t px, int32_t py,
                int32_t dx, int32_t dy, int32_t len, int32_t w, bool outline)
 {
+    uint32_t colors = 0;
+
     // length of (dx, dy) is assumed to be fixed(256)
     const int dshift = FIXED_SHIFT + 8;
 
@@ -403,13 +452,13 @@ void draw_rect(struct GBitmap *bmp, struct scanline *scanlines,
     int32_t pxdx = px * dx;
 
     if (dy > 0 && dx < 0)
-        DRAW_RECT(y0, y1, y2, y3, -1, 1);
+        DRAW_RECT(y0, y1, y2, y3, -1, 1, false);
     else if (dy > 0 && dx > 0)
-        DRAW_RECT(y0, y1, y2, y3, 1, 1);
+        DRAW_RECT(y0, y1, y2, y3, 1, 1, false);
     else if (dy > 0)
-        DRAW_RECT(y0, y1, y2, y3, 0, 1);
+        DRAW_RECT(y0, y1, y2, y3, 0, 1, false);
     else
-        DRAW_RECT(y0, y1, y2, y3, 1, 0);
+        DRAW_RECT(y0, y1, y2, y3, 1, 0, false);
 }
 
 void draw_digit(struct GBitmap *bmp, uint8_t color, int x, int y, int n)
