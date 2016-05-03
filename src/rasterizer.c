@@ -48,6 +48,29 @@ static inline int32_t mini(int32_t a, int32_t b)
     return a < b ? a : b;
 }
 
+static int32_t sqrti(int32_t i)
+{
+    int32_t r = 0;
+    int32_t n = 1 << 30;
+
+    if (i < 0) return 0;
+    while (n > i) n /= 4;
+
+    while (n != 0)
+    {
+        int32_t k = n + r;
+        if (k <= i)
+        {
+            i -= k;
+            r = r / 2 + n;
+        }
+        else
+            r /= 2;
+        n /= 4;
+    }
+    return r;
+}
+
 void draw_box(struct GBitmap *bmp, uint8_t color, int x, int y, int w, int h)
 {
     for (int i = 0; i < h; ++i)
@@ -66,28 +89,43 @@ void draw_circle(struct GBitmap *bmp, uint8_t color, int32_t cx, int32_t cy,
     int32_t fs2 = fixed(smooth)/2;
     int od = outline ? 3 : 4;
 
-    int y0 = fixedfloor(cy - r);
-    int y1 = fixedceil(cy + r);
-    int x0 = fixedfloor(cx - r);
-    int x1 = fixedfloor(cx + r);
-
     int32_t r0 = r - fs2;
-    int32_t r1 = r + fs2;
+    int32_t r1 = r + fs2 - half;
     int32_t r2 = r1 * r1;
     int32_t rs = r2 - r0 * r0;
 
+    int y0 = fixedfloor(cy - r1);
+    int y1 = fixedceil(cy + r1);
+
     for (int y = y0; y < y1; ++y)
     {
-        int32_t dy = fixed(y) + half - cy;
         uint8_t *line = gbitmap_get_data_row_info(bmp, (unsigned)y).data;
-        for (int x = x0; x < x1; ++x)
+        int32_t fy = fixed(y) + half - cy;
+        int rx = sqrti(r2 - fy * fy);
+        int32_t dy = fixed(y) + half - cy;
+        int x, x0 = fixedfloor(cx - rx);
+        int x1 = fixedfloor(cx + rx + half);
+        for (x = x0; x < x1; ++x)
         {
             int32_t dx = fixed(x) + half - cx;
             int32_t ds = dx * dx + dy * dy;
             int32_t a = (r2 - ds) * 4 / rs;
             if (a <= 0) continue;
-            if (a >= 4) line[x] = color;
-            else line[x] = blend(line[x], color, a, od);
+            if (a < 4) line[x] = blend(line[x], color, a, od);
+            else break;
+        }
+
+        int dxs = x - x0;
+        for (; x < x1 - dxs; ++x) line[x] = color;
+
+        for (; x < x1; ++x)
+        {
+            int32_t dx = fixed(x) + half - cx;
+            int32_t ds = dx * dx + dy * dy;
+            int32_t a = (r2 - ds) * 4 / rs;
+            if (a <= 0) break;
+            if (a < 4) line[x] = blend(line[x], color, a, od);
+            else line[x] = color;
         }
     }
 }
