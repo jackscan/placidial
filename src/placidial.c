@@ -76,6 +76,7 @@ struct
     bool hourhand_below;
 
     struct {
+        struct bmpset font;
         int ofweek, ofmonth;
         int px, py;
         bool update;
@@ -112,7 +113,7 @@ struct
     } statusconf;
 } g;
 
-static inline uint32_t get_colors(uint8_t bg, uint8_t col)
+static inline uint32_t get_aa_colors(uint8_t bg, uint8_t col)
 {
     int od = g.outline ? 3 : 4;
     uint32_t b = bg;
@@ -120,6 +121,16 @@ static inline uint32_t get_colors(uint8_t bg, uint8_t col)
     return (uint32_t)blend(b, c, 1, od)
         | (((uint32_t)blend(b, c, 2, od)) << 8)
         | (((uint32_t)blend(b, c, 3, od)) << 16)
+        | (c << 24);
+}
+
+static inline uint32_t get_colors(uint8_t bg, uint8_t col)
+{
+    uint32_t b = bg;
+    uint32_t c = col;
+    return b
+        | (((uint32_t)blend(b, c, 2, 4)) << 8)
+        | (((uint32_t)blend(b, c, 3, 4)) << 16)
         | (c << 24);
 }
 
@@ -147,25 +158,26 @@ static void draw_week(GBitmap *bmp, int x, int y)
 
 static void draw_day(GBitmap *bmp, int x, int y)
 {
-    int x0 = (x - DIGIT_WIDTH) & ~0x3;
-    int x1 = x0 + DIGIT_WIDTH + 4;
+    int x0 = (x - g.day.font.w) & ~0x3;
+    int x1 = x0 + g.day.font.w + 4;
     int my = 2;
 
     draw_week(bmp, x0, y + my);
 
     int d10 = g.day.ofmonth / 10;
     int d01 = g.day.ofmonth - d10 * 10;
-    draw_digit(bmp, g.daycolors.dayofmonth, x0, y - DIGIT_HEIGHT - my, d10);
-    draw_digit(bmp, g.daycolors.dayofmonth, x1, y - DIGIT_HEIGHT - my, d01);
+    uint32_t colors = get_colors(g.bgcol, g.daycolors.dayofmonth);
+    draw_2bit_bmp(bmp, &g.day.font, d10, x0, y - g.day.font.h - my, colors);
+    draw_2bit_bmp(bmp, &g.day.font, d01, x1, y - g.day.font.h - my, colors);
 }
 
 static void clear_day(GBitmap *bmp, int px, int py)
 {
     int my = 2;
-    int iy0 = py - DIGIT_HEIGHT - my;
+    int iy0 = py - g.day.font.h - my;
     int iy1 = py + 11 + my;
-    int ix0 = (px - DIGIT_WIDTH) >> 2;
-    int ix1 = ix0 + ((2 * DIGIT_WIDTH + 4) >> 2);
+    int ix0 = (px - g.day.font.w) >> 2;
+    int ix1 = ix0 + ((2 * g.day.font.w + 4) >> 2);
     uint32_t col4 =
         (g.bgcol << 24) | (g.bgcol << 16) | (g.bgcol << 8) | g.bgcol;
 
@@ -250,7 +262,7 @@ static void draw_tick(GBitmap *bmp, struct tick_conf *conf,
         int32_t dx = -sina * fixed(256) / TRIG_MAX_RATIO;
         int32_t dy = cosa * fixed(256) / TRIG_MAX_RATIO;
 
-        uint32_t colors = get_colors(g.bgcol, conf->col);
+        uint32_t colors = get_aa_colors(g.bgcol, conf->col);
 
         draw_bg_rect(bmp, g.scanlines, colors, px, py, dx, dy, conf->h,
                      conf->w / 2);
@@ -342,7 +354,7 @@ static void draw_hand(struct GBitmap *bmp,struct hand_conf *conf, int32_t mr,
     int32_t len = mr * (conf->r1 + conf->r0) / 256;
     if (bg)
     {
-        uint32_t colors = get_colors(g.bgcol, conf->col);
+        uint32_t colors = get_aa_colors(g.bgcol, conf->col);
         draw_bg_rect(bmp, g.scanlines, colors, px, py, dx, dy, len,
                      conf->w / 2);
     }
@@ -866,6 +878,14 @@ static void connection_handler(bool connected)
     }
 }
 
+static void load_bmpset(struct bmpset *set, uint32_t resid, int size)
+{
+    set->bmp = gbitmap_create_with_resource(resid);
+    struct GRect bounds = gbitmap_get_bounds(set->bmp);
+    set->w = bounds.size.w;
+    set->h = bounds.size.h / size;
+}
+
 static void window_load(Window *window)
 {
     Layer *window_layer = window_get_root_layer(window);
@@ -940,6 +960,8 @@ static void init()
 
     read_settings();
 
+    load_bmpset(&g.day.font, RESOURCE_ID_DIGITS15, 10);
+
     g.window = window_create();
     window_set_window_handlers(g.window,
                                (WindowHandlers){
@@ -951,6 +973,7 @@ static void init()
 static void deinit()
 {
     window_destroy(g.window);
+    gbitmap_destroy(g.day.font.bmp);
 }
 
 int main(void)

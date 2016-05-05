@@ -499,6 +499,30 @@ void draw_rect(struct GBitmap *bmp, struct scanline *scanlines,
         DRAW_RECT(y0, y1, y2, y3, 1, 0, false);
 }
 
+void draw_2bit_bmp(struct GBitmap *bmp, struct bmpset *set, int n,
+                   int x, int y, uint32_t colors)
+{
+    int ix = x >> 2;
+    int iw = (set->w + 3) >> 2;
+    int y0 = set->h * n;
+    for (int r = 0; r < set->h; ++r)
+    {
+        uint8_t *src = gbitmap_get_data_row_info(set->bmp, r + y0).data;
+        uint32_t *dst = (uint32_t *)gbitmap_get_data_row_info(bmp, r + y).data;
+        for (int c = 0; c < iw; ++c)
+        {
+            uint8_t s = src[c];
+            uint32_t word = 0;
+            for (int i = 0; i < 4; ++i)
+            {
+                uint32_t a = (s >> (6 - i * 2)) & 3;
+                word |= (uint32_t)((colors >> (a * 8)) & 0xFF) << (i * 8);
+            }
+            dst[ix + c] = word;
+        }
+    }
+}
+
 void draw_digit(struct GBitmap *bmp, uint8_t color, int x, int y, int n)
 {
     static const uint32_t digitmask[5] = {
