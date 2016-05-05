@@ -100,6 +100,8 @@ struct
         uint8_t show;
     } dialnumbers;
 
+    struct bmpset dialfont;
+
     struct {
         BatteryChargeState batstate;
         bool connected;
@@ -167,8 +169,9 @@ static void draw_day(GBitmap *bmp, int x, int y)
     int d10 = g.day.ofmonth / 10;
     int d01 = g.day.ofmonth - d10 * 10;
     uint32_t colors = get_colors(g.bgcol, g.daycolors.dayofmonth);
-    draw_2bit_bmp(bmp, &g.day.font, d10, x0, y - g.day.font.h - my, colors);
-    draw_2bit_bmp(bmp, &g.day.font, d01, x1, y - g.day.font.h - my, colors);
+    int y0 = y - g.day.font.h - my;
+    draw_2bit_bmp_aligned(bmp, &g.day.font, d10, x0, y0, colors);
+    draw_2bit_bmp_aligned(bmp, &g.day.font, d01, x1, y0, colors);
 }
 
 static void clear_day(GBitmap *bmp, int px, int py)
@@ -220,7 +223,7 @@ static inline void update_scanlines(struct scanline *scanlines,
 
 static void draw_dial_digits(GBitmap *bmp, int x, int y, int n, bool pad)
 {
-    int y0 = (y - SMALL_DIGIT_HEIGHT / 2);
+    int y0 = (y - g.dialfont.h / 2);
     int d10 = n / 10;
     int d01 = n - d10 * 10;
 
@@ -230,22 +233,24 @@ static void draw_dial_digits(GBitmap *bmp, int x, int y, int n, bool pad)
         d01 = 2;
     }
 
+    uint32_t colors = get_colors(g.bgcol, g.dialnumbers.col);
+
     if (pad || d10 != 0)
     {
-        int spc = SMALL_DIGIT_WIDTH / 3;
-        int x0 = (x - SMALL_DIGIT_WIDTH - spc / 2);
-        draw_small_digit(bmp, g.dialnumbers.col, x0, y0, d10);
-        draw_small_digit(bmp, g.dialnumbers.col,
-                         x0 + SMALL_DIGIT_WIDTH + spc, y0, d01);
-        update_scanlines(g.scanlines, y0, y0 + SMALL_DIGIT_HEIGHT,
-                         x0, x0 + 2 * SMALL_DIGIT_WIDTH + spc);
+        int spc = g.dialfont.w / 3;
+        int x0 = (x - g.dialfont.w - spc / 2);
+        int x1 = x0 + g.dialfont.w + spc;
+        draw_2bit_bmp(bmp, &g.dialfont, d10, x0, y0, colors);
+        draw_2bit_bmp(bmp, &g.dialfont, d01, x1, y0, colors);
+        update_scanlines(g.scanlines, y0, y0 + g.dialfont.h,
+                         x0, x0 + 2 * g.dialfont.w + spc);
     }
     else
     {
-        int x0 = (x - SMALL_DIGIT_WIDTH /2);
-        draw_small_digit(bmp, g.dialnumbers.col, x0, y0, d01);
-        update_scanlines(g.scanlines, y0, y0 + SMALL_DIGIT_HEIGHT,
-                         x0, x0 + SMALL_DIGIT_WIDTH);
+        int x0 = (x - g.dialfont.w / 2);
+        draw_2bit_bmp(bmp, &g.dialfont, d01, x0, y0, colors);
+        update_scanlines(g.scanlines, y0, y0 + g.dialfont.h,
+                         x0, x0 + g.dialfont.w);
     }
 }
 
@@ -274,7 +279,9 @@ static void draw_dial_number(GBitmap *bmp, int n, bool pad,
 {
     int32_t sina = sin_lookup(a);
     int32_t cosa = cos_lookup(a);
-    int32_t t = r - fixed(11);
+    int32_t w = g.dialfont.w;
+    int32_t h = g.dialfont.h;
+    int32_t t = r - fixed(w + h / 2);
     int32_t half = 1 << (FIXED_SHIFT - 1);
     int nx = (cx + sina * t / TRIG_MAX_RATIO + half) >> FIXED_SHIFT;
     int ny = (cy - cosa * t / TRIG_MAX_RATIO + half) >> FIXED_SHIFT;
@@ -961,6 +968,7 @@ static void init()
     read_settings();
 
     load_bmpset(&g.day.font, RESOURCE_ID_DIGITS15, 10);
+    load_bmpset(&g.dialfont, RESOURCE_ID_DIGITS13, 10);
 
     g.window = window_create();
     window_set_window_handlers(g.window,
@@ -974,6 +982,7 @@ static void deinit()
 {
     window_destroy(g.window);
     gbitmap_destroy(g.day.font.bmp);
+    gbitmap_destroy(g.dialfont.bmp);
 }
 
 int main(void)

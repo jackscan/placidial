@@ -36,6 +36,11 @@
             "type": "png"
         },
         {
+            "file": "images/digits13.png",
+            "name": "DIGITS13",
+            "type": "png"
+        },
+        {
             "file": "images/digits15.png",
             "name": "DIGITS15",
             "type": "png"

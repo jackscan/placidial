@@ -48,12 +48,12 @@ static inline int32_t mini(int32_t a, int32_t b)
     return a < b ? a : b;
 }
 
-static int32_t sqrti(int32_t i)
+int32_t sqrti(int32_t i)
 {
     int32_t r = 0;
     int32_t n = 1 << 30;
 
-    if (i < 0) return 0;
+    if (i <= 0) return 0;
     while (n > i) n /= 4;
 
     while (n != 0)
@@ -501,6 +501,24 @@ void draw_rect(struct GBitmap *bmp, struct scanline *scanlines,
 
 void draw_2bit_bmp(struct GBitmap *bmp, struct bmpset *set, int n,
                    int x, int y, uint32_t colors)
+{
+    int y0 = set->h * n;
+    for (int r = 0; r < set->h; ++r)
+    {
+        uint8_t *src = gbitmap_get_data_row_info(set->bmp, r + y0).data;
+        uint8_t *dst = gbitmap_get_data_row_info(bmp, r + y).data;
+        for (int c = 0; c < set->w; ++c)
+        {
+            int sb = c / 4;
+            int sr = c & 0x3;
+            uint8_t a = (src[sb] >> (6 - sr * 2)) & 0x3;
+            dst[x + c] = colors >> (a * 8);
+        }
+    }
+}
+
+void draw_2bit_bmp_aligned(struct GBitmap *bmp, struct bmpset *set, int n,
+                           int x, int y, uint32_t colors)
 {
     int ix = x >> 2;
     int iw = (set->w + 3) >> 2;

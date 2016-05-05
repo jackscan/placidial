@@ -56,6 +56,8 @@ struct bmpset
 
 void draw_2bit_bmp(struct GBitmap *bmp, struct bmpset *set, int n,
                    int x, int y, uint32_t colors);
+void draw_2bit_bmp_aligned(struct GBitmap *bmp, struct bmpset *set, int n,
+                           int x, int y, uint32_t colors);
 void draw_digit(struct GBitmap *bmp, uint8_t color, int x, int y, int n);
 void draw_small_digit(struct GBitmap *bmp, uint8_t color, int x, int y, int n);
 void draw_box(struct GBitmap *bmp, uint8_t color, int x, int y, int w, int h);
@@ -76,6 +78,8 @@ void draw_disconnected(struct GBitmap *bmp, struct scanline *scanlines,
                        uint8_t color, int cx, int cy);
 void draw_battery(struct GBitmap *bmp, struct scanline *scanlines,
                   uint8_t color, int cx, int cy, uint8_t level);
+
+int32_t sqrti(int32_t i);
 
 static inline int32_t fixed(int i)
 {
