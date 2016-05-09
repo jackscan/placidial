@@ -317,7 +317,7 @@ void draw_white_rect(struct GBitmap *bmp, struct scanline *scanlines,
     if (a < 4 && bg) line[x] = (uint8_t)(colors >> (8 * (a - 1))); \
     else if (a < 4) line[x] = blend(line[x], color, a, od)
 
-#define DRAW_RECT_LINES(y0, y1, rx, ry, mask, bg) ({\
+#define DRAW_RECT_LINES(y0, y1, mask, bg) ({\
 \
     for (int y = y0; y < y1; ++y) \
     { \
@@ -326,18 +326,18 @@ void draw_white_rect(struct GBitmap *bmp, struct scanline *scanlines,
         int32_t fydy = (fy - py) * dy; \
  \
         int32_t x0, x1, x2; \
-        if (ry > 0) \
+        if (dy > 0) \
         { \
             x0 = (fydx - ws0) / dy; \
             x1 = (fydx + ws1) / dy; \
             x2 = (fydx + ws0) / dy; \
  \
-            if (rx != 0 && mask) \
+            if (dx != 0 && mask) \
             { \
-                int32_t x3 = (((rx > 0 ? t0 : t1) << dshift) - fydy) / dx; \
-                int32_t x4 = (((rx > 0 ? t1 : t0) << dshift) - fydy) / dx; \
+                int32_t x3 = (((dx > 0 ? t0 : t1) << dshift) - fydy) / dx; \
+                int32_t x4 = (((dx > 0 ? t1 : t0) << dshift) - fydy) / dx; \
                 int32_t x5 = \
-                    ((rx < 0 ? s0 << dshift : s1 << dshift) - fydy) / dx; \
+                    ((dx < 0 ? s0 << dshift : s1 << dshift) - fydy) / dx; \
                 if (x3 > x0) x0 = x3; \
                 if (x4 < x1) x1 = x4; \
                 if (x5 < x2) x2 = x5; \
@@ -381,16 +381,16 @@ void draw_white_rect(struct GBitmap *bmp, struct scanline *scanlines,
     } \
 })
 
-#define DRAW_RECT(y0, y1, y2, y3, rx, ry, bg) ({\
+#define DRAW_RECT(y0, y1, y2, y3, bg) ({\
     if (y1 < y2) \
     { \
-        DRAW_RECT_LINES(y0, y1, rx, ry, 0x1, bg); \
-        DRAW_RECT_LINES(y1, y2, rx, ry, 0, bg); \
-        DRAW_RECT_LINES(y2, y3, rx, ry, 0x2, bg); \
+        DRAW_RECT_LINES(y0, y1, 0x1, bg); \
+        DRAW_RECT_LINES(y1, y2, 0, bg); \
+        DRAW_RECT_LINES(y2, y3, 0x2, bg); \
     } \
     else \
     { \
-        DRAW_RECT_LINES(y0, y3, rx, ry, 0x3, bg); \
+        DRAW_RECT_LINES(y0, y3, 0x3, bg); \
     } \
 })
 
@@ -436,14 +436,7 @@ void draw_bg_rect(struct GBitmap *bmp, struct scanline *scanlines,
     int32_t pxdy = px * dy;
     int32_t pxdx = px * dx;
 
-    if (dy > 0 && dx < 0)
-        DRAW_RECT(y0, y1, y2, y3, -1, 1, true);
-    else if (dy > 0 && dx > 0)
-        DRAW_RECT(y0, y1, y2, y3, 1, 1, true);
-    else if (dy > 0)
-        DRAW_RECT(y0, y1, y2, y3, 0, 1, true);
-    else
-        DRAW_RECT(y0, y1, y2, y3, 1, 0, true);
+    DRAW_RECT(y0, y1, y2, y3, true);
 }
 
 
@@ -489,14 +482,7 @@ void draw_rect(struct GBitmap *bmp, struct scanline *scanlines,
     int32_t pxdy = px * dy;
     int32_t pxdx = px * dx;
 
-    if (dy > 0 && dx < 0)
-        DRAW_RECT(y0, y1, y2, y3, -1, 1, false);
-    else if (dy > 0 && dx > 0)
-        DRAW_RECT(y0, y1, y2, y3, 1, 1, false);
-    else if (dy > 0)
-        DRAW_RECT(y0, y1, y2, y3, 0, 1, false);
-    else
-        DRAW_RECT(y0, y1, y2, y3, 1, 0, false);
+    DRAW_RECT(y0, y1, y2, y3, false);
 }
 
 void draw_2bit_bmp(struct GBitmap *bmp, struct bmpset *set, int n,
