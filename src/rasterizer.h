@@ -82,6 +82,18 @@ static inline int32_t fixed(int i)
    return (int32_t)i << FIXED_SHIFT;
 }
 
+static inline bool dark_color(uint8_t color)
+{
+    return (color & 0x2A) == 0;
+}
+
+static inline uint8_t blend_inv(uint32_t x, uint32_t y, int a, int d)
+{
+    uint32_t b = ((0x33 - (x & 0x33)) * (d - a) + (0x33 - (y & 0x33)) * a);
+    uint32_t c = ((0xCC - (x & 0xCC)) * (d - a) + (0xCC - (y & 0xCC)) * a);
+    return (uint8_t)((0xFF - (((b & 0xCC) + (c & 0x330)) >> 2)) | 0xC0);
+}
+
 static inline uint8_t blend(uint32_t x, uint32_t y, int a, int d)
 {
     uint32_t b = ((x & 0x33) * (d - a) + (y & 0x33) * a);

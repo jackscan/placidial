@@ -120,10 +120,16 @@ static inline uint32_t get_aa_colors(uint8_t bg, uint8_t col)
     int od = g.outline ? 3 : 4;
     uint32_t b = bg;
     uint32_t c = col;
-    return (uint32_t)blend(b, c, 1, od)
-        | (((uint32_t)blend(b, c, 2, od)) << 8)
-        | (((uint32_t)blend(b, c, 3, od)) << 16)
-        | (c << 24);
+    if (dark_color(col))
+        return (uint32_t)blend_inv(b, c, 1, od)
+            | (((uint32_t)blend_inv(b, c, 2, od)) << 8)
+            | (((uint32_t)blend_inv(b, c, 3, od)) << 16)
+            | (c << 24);
+    else
+        return (uint32_t)blend(b, c, 1, od)
+            | (((uint32_t)blend(b, c, 2, od)) << 8)
+            | (((uint32_t)blend(b, c, 3, od)) << 16)
+            | (c << 24);
 }
 
 static inline uint32_t get_colors(uint8_t bg, uint8_t col)

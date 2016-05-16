@@ -81,6 +81,40 @@ void draw_box(struct GBitmap *bmp, uint8_t color, int x, int y, int w, int h)
     }
 }
 
+#define DRAW_CIRCLE_LINES(y0, y1, blend) ({\
+    for (int y = y0; y < y1; ++y) \
+    { \
+        uint8_t *line = gbitmap_get_data_row_info(bmp, (unsigned)y).data; \
+        int32_t fy = fixed(y) + half - cy; \
+        int rx = sqrti(r2 - fy * fy); \
+        int32_t dy = fixed(y) + half - cy; \
+        int x, x0 = fixedfloor(cx - rx); \
+        int x1 = fixedfloor(cx + rx + half); \
+        for (x = x0; x < x1; ++x) \
+        { \
+            int32_t dx = fixed(x) + half - cx; \
+            int32_t ds = dx * dx + dy * dy; \
+            int32_t a = (r2 - ds) * 4 / rs; \
+            if (a <= 0) continue; \
+            if (a < 4) line[x] = blend(line[x], color, a, od); \
+            else break; \
+        } \
+ \
+        int dxs = x - x0; \
+        for (; x < x1 - dxs; ++x) line[x] = color; \
+ \
+        for (; x < x1; ++x) \
+        { \
+            int32_t dx = fixed(x) + half - cx; \
+            int32_t ds = dx * dx + dy * dy; \
+            int32_t a = (r2 - ds) * 4 / rs; \
+            if (a <= 0) break; \
+            if (a < 4) line[x] = blend(line[x], color, a, od); \
+            else line[x] = color; \
+        } \
+    } \
+})
+
 void draw_circle(struct GBitmap *bmp, uint8_t color, int32_t cx, int32_t cy,
                  int32_t r, bool outline)
 {
@@ -97,37 +131,10 @@ void draw_circle(struct GBitmap *bmp, uint8_t color, int32_t cx, int32_t cy,
     int y0 = fixedfloor(cy - r1);
     int y1 = fixedceil(cy + r1);
 
-    for (int y = y0; y < y1; ++y)
-    {
-        uint8_t *line = gbitmap_get_data_row_info(bmp, (unsigned)y).data;
-        int32_t fy = fixed(y) + half - cy;
-        int rx = sqrti(r2 - fy * fy);
-        int32_t dy = fixed(y) + half - cy;
-        int x, x0 = fixedfloor(cx - rx);
-        int x1 = fixedfloor(cx + rx + half);
-        for (x = x0; x < x1; ++x)
-        {
-            int32_t dx = fixed(x) + half - cx;
-            int32_t ds = dx * dx + dy * dy;
-            int32_t a = (r2 - ds) * 4 / rs;
-            if (a <= 0) continue;
-            if (a < 4) line[x] = blend(line[x], color, a, od);
-            else break;
-        }
-
-        int dxs = x - x0;
-        for (; x < x1 - dxs; ++x) line[x] = color;
-
-        for (; x < x1; ++x)
-        {
-            int32_t dx = fixed(x) + half - cx;
-            int32_t ds = dx * dx + dy * dy;
-            int32_t a = (r2 - ds) * 4 / rs;
-            if (a <= 0) break;
-            if (a < 4) line[x] = blend(line[x], color, a, od);
-            else line[x] = color;
-        }
-    }
+    if (dark_color(color))
+        DRAW_CIRCLE_LINES(y0, y1, blend_inv);
+    else
+        DRAW_CIRCLE_LINES(y0, y1, blend);
 }
 
 static inline void update_scanline(struct scanline *line, int x0, int x1)
@@ -138,7 +145,7 @@ static inline void update_scanline(struct scanline *line, int x0, int x1)
     if (line->end < end) line->end = end;
 }
 
-#define AA_STEP(mask, left, bg) \
+#define AA_STEP(mask, left, blend) \
     int32_t d0 = d0s >> dshift; \
     int32_t d1 = d1s >> dshift; \
     d0s -= dys; \
@@ -150,10 +157,9 @@ static inline void update_scanline(struct scanline *line, int x0, int x1)
 \
     int a = (d * 4 / smooth) >> FIXED_SHIFT; \
     if (a <= 0) continue; \
-    if (a < 4 && bg) line[x] = (uint8_t)(colors >> (8 * (a - 1))); \
-    else if (a < 4) line[x] = blend(line[x], color, a, od)
+    if (a < 4) line[x] = blend
 
-#define DRAW_RECT_LINES(y0, y1, mask, bg) ({\
+#define DRAW_RECT_LINES(y0, y1, mask, blend) ({\
 \
     for (int y = y0; y < y1; ++y) \
     { \
@@ -200,7 +206,7 @@ static inline void update_scanline(struct scanline *line, int x0, int x1)
         int x; \
         for (x = ix0; x < ix1; ++x) \
         { \
-            AA_STEP(mask, true, bg); \
+            AA_STEP(mask, true, blend); \
             else break; \
         } \
  \
@@ -211,22 +217,22 @@ static inline void update_scanline(struct scanline *line, int x0, int x1)
         d1s = (fixed(x) + half) * dx - pxdx + fydy; \
         for (; x < ix2; ++x) \
         { \
-            AA_STEP(mask, false, bg); \
+            AA_STEP(mask, false, blend); \
             else line[x] = color; \
         } \
     } \
 })
 
-#define DRAW_RECT(y0, y1, y2, y3, bg) ({\
+#define DRAW_RECT(y0, y1, y2, y3, blend) ({\
     if (y1 < y2) \
     { \
-        DRAW_RECT_LINES(y0, y1, 0x1, bg); \
-        DRAW_RECT_LINES(y1, y2, 0, bg); \
-        DRAW_RECT_LINES(y2, y3, 0x2, bg); \
+        DRAW_RECT_LINES(y0, y1, 0x1, blend); \
+        DRAW_RECT_LINES(y1, y2, 0, blend); \
+        DRAW_RECT_LINES(y2, y3, 0x2, blend); \
     } \
     else \
     { \
-        DRAW_RECT_LINES(y0, y3, 0x3, bg); \
+        DRAW_RECT_LINES(y0, y3, 0x3, blend); \
     } \
 })
 
@@ -272,7 +278,7 @@ void draw_bg_rect(struct GBitmap *bmp, struct scanline *scanlines,
     int32_t pxdy = px * dy;
     int32_t pxdx = px * dx;
 
-    DRAW_RECT(y0, y1, y2, y3, true);
+    DRAW_RECT(y0, y1, y2, y3, (uint8_t)(colors >> (8 * (a - 1))));
 }
 
 
@@ -280,8 +286,6 @@ void draw_rect(struct GBitmap *bmp, struct scanline *scanlines,
                uint8_t color, int32_t px, int32_t py,
                int32_t dx, int32_t dy, int32_t len, int32_t w, bool outline)
 {
-    uint32_t colors = 0;
-
     // length of (dx, dy) is assumed to be fixed(256)
     const int dshift = FIXED_SHIFT + 8;
 
@@ -318,7 +322,10 @@ void draw_rect(struct GBitmap *bmp, struct scanline *scanlines,
     int32_t pxdy = px * dy;
     int32_t pxdx = px * dx;
 
-    DRAW_RECT(y0, y1, y2, y3, false);
+    if (dark_color(color))
+        DRAW_RECT(y0, y1, y2, y3, blend_inv(line[x], color, a, od));
+    else
+        DRAW_RECT(y0, y1, y2, y3, blend(line[x], color, a, od));
 }
 
 void draw_2bit_bmp(struct GBitmap *bmp, struct bmpset *set, int n,
