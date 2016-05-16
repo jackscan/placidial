@@ -131,8 +131,8 @@ static inline uint32_t get_colors(uint8_t bg, uint8_t col)
     uint32_t b = bg;
     uint32_t c = col;
     return b
-        | (((uint32_t)blend(b, c, 2, 4)) << 8)
-        | (((uint32_t)blend(b, c, 3, 4)) << 16)
+        | (((uint32_t)blend(b, c, 2, 5)) << 8)
+        | (((uint32_t)blend(b, c, 3, 5)) << 16)
         | (c << 24);
 }
 
