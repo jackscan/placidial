@@ -183,21 +183,30 @@ static void draw_day(GBitmap *bmp, int x, int y)
     draw_2bit_bmp_aligned(bmp, &g.day.font, d01, x1, y0, colors);
 }
 
-static void clear_day(GBitmap *bmp, int px, int py)
+struct rect { int x0, y0, x1, y1; };
+
+static struct rect get_day_rect(int px, int py)
 {
     int my = 2;
-    int iy0 = py - g.day.font.h - my;
-    int iy1 = py + 11 + my;
-    int ix0 = (px - g.day.font.w) >> 2;
-    int ix1 = ix0 + ((2 * g.day.font.w + 4) >> 2);
+    return (struct rect){
+        (px - g.day.font.w) >> 2,
+        py - g.day.font.h - my,
+        (px + g.day.font.w + 7) >> 2,
+        py + 11 + my,
+    };
+}
+
+static void clear_day(GBitmap *bmp, int px, int py)
+{
+    struct rect r = get_day_rect(px, py);
     uint32_t col4 =
         (g.bgcol << 24) | (g.bgcol << 16) | (g.bgcol << 8) | g.bgcol;
 
-    for (int y = iy0; y < iy1; ++y)
+    for (int y = r.y0; y < r.y1; ++y)
     {
         GBitmapDataRowInfo row = gbitmap_get_data_row_info(bmp, y);
         uint32_t *line = (uint32_t *)row.data;
-        for (int x = ix0; x < ix1; ++x)
+        for (int x = r.x0; x < r.x1; ++x)
             line[x] = col4;
     }
 }
@@ -428,6 +437,21 @@ static void render(GContext *ctx)
     }
     else
     {
+        // check if we need to redraw day due to cleared scanlines
+        if (! g.day.update)
+        {
+            struct rect r = get_day_rect(g.day.px, g.day.py);
+            for (int y = r.y0; y < r.y1; ++y)
+            {
+                struct scanline *sl = g.scanlines + y;
+                if (sl->start < r.x1 && sl->end > r.x0)
+                {
+                    g.day.update = true;
+                    break;
+                }
+            }
+        }
+
         // clear scanlines
         uint32_t col4 =
             (g.bgcol << 24) | (g.bgcol << 16) | (g.bgcol << 8) | g.bgcol;
@@ -524,7 +548,7 @@ static void render(GContext *ctx)
                 g.day.px = px;
                 g.day.py = py;
             }
-            else if (g.day.update || g.showsec)
+            else if (g.day.update)
                 draw_day(bmp, g.day.px, g.day.py);
         }
 
