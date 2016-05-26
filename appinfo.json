@@ -25,7 +25,8 @@
     "statusconf": 10,
     "dialnum": 11,
     "hourbelow": 12,
-    "mintick": 13
+    "mintick": 13,
+    "lasttick": 14
   },
   "resources": {
     "media": [

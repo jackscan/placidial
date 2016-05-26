@@ -40,6 +40,7 @@ enum
     DIALNUMBERS_KEY,
     HOURBELOW_KEY,
     MINTICK_KEY,
+    LASTTICK_KEY,
     NUM_KEYS
 };
 
@@ -77,6 +78,7 @@ struct
 
     bool outline;
     bool hourhand_below;
+    uint8_t last_tick;
 
     struct {
         struct bmpset font;
@@ -516,12 +518,35 @@ static void render(GContext *ctx)
     {
         int r = (mr >> FIXED_SHIFT) * 9 / 16;
 
-        int dx = -(hour.dx + min.dx) / 2;
-        int dy = -(hour.dy + min.dy) / 2;
+        int hdx = hour.dx;
+        int hdy = hour.dy;
+        int mdx = min.dx;
+        int mdy = min.dy;
+
+        if (g.last_tick & 0x1)
+        {
+            int32_t a = ((g.hour % 12) * TRIG_MAX_ANGLE) / 12;
+            int32_t sina = sin_lookup(a);
+            int32_t cosa = cos_lookup(a);
+            hdx = sina * fixed(256) / TRIG_MAX_RATIO;
+            hdy = -cosa * fixed(256) / TRIG_MAX_RATIO;
+        }
+
+        if (g.last_tick & 0x2)
+        {
+            int32_t a = ((g.min / 5) * TRIG_MAX_ANGLE) / 12;
+            int32_t sina = sin_lookup(a);
+            int32_t cosa = cos_lookup(a);
+            mdx = sina * fixed(256) / TRIG_MAX_RATIO;
+            mdy = -cosa * fixed(256) / TRIG_MAX_RATIO;
+        }
+
+        int dx = -(hdx + mdx) / 2;
+        int dy = -(hdy + mdy) / 2;
         if (dx == 0 && dy == 0)
         {
-            dx = hour.dy;
-            dy = -hour.dx;
+            dx = hdy;
+            dy = -hdx;
         }
 
         if (absi(dx) > absi(dy))
@@ -577,14 +602,16 @@ static void render(GContext *ctx)
     {
         int32_t s = mr * 15 / 16;
 
-        int hourmark = ((g.hour * 60 + g.min + 30) % 720) * 12 / 720;
+        int round60 = (g.last_tick & 0x1) == 0 ? 30 : 0;
+        int round5 = (g.last_tick & 0x2) == 0 ? 2 : 0;
+        int hourmark = ((g.hour * 60 + g.min + round60) % 720) * 12 / 720;
         int32_t c =
             g.showsec ? ((g.sec + 2) % 60) * 12 / 60 * TRIG_MAX_ANGLE / 12 : -1;
         int32_t b = g.hour_tick.show ? hourmark * TRIG_MAX_ANGLE / 12 : -1;
         if (c == b) c = -1;
 
         {
-            int minmark = (g.min + 2) / 5;
+            int minmark = (g.min + round5) / 5;
             int a = (minmark * TRIG_MAX_ANGLE / 12) % TRIG_MAX_ANGLE;
             if (b == a || b == a) b = -1;
             if (c == a || c == a) c = -1;
@@ -624,7 +651,7 @@ static void render(GContext *ctx)
             if (g.dialnumbers.show & 0x1)
             {
                 int f = clock_is_24h_style() ? 24 : 12;
-                h = ((g.hour * 60 + g.min + 30) / 60) % f;
+                h = ((g.hour * 60 + g.min + round60) / 60) % f;
                 if (h == 0) h = f;
                 b = (h % 12) * TRIG_MAX_ANGLE / 12;
             }
@@ -633,7 +660,7 @@ static void render(GContext *ctx)
 
             if (g.dialnumbers.show & 0x2)
             {
-                int m = (((g.min + 2) / 5) * 5) % 60;
+                int m = (((g.min + round5) / 5) * 5) % 60;
                 int a = m * TRIG_MAX_ANGLE / 60;
                 draw_dial_number(bmp, m, true, cx, cy, a, sn);
                 if (b == a) b = -1;
@@ -797,6 +824,11 @@ static void read_settings(void)
                 (int)g.min_tick.w, (int)g.min_tick.h,
                 g.min_tick.col, (int)g.min_tick.show);
     }
+    if (persist_exists(LASTTICK_KEY))
+    {
+        g.last_tick = (uint8_t)persist_read_int(LASTTICK_KEY);
+        APP_LOG(APP_LOG_LEVEL_DEBUG, "lasttick: 0x%x", (int)g.last_tick);
+    }
 }
 
 static void save_settings(void)
@@ -816,6 +848,7 @@ static void save_settings(void)
     persist_write_data(STATUSCONF_KEY, &g.statusconf, sizeof(g.statusconf));
     persist_write_data(DIALNUMBERS_KEY, &g.dialnumbers, sizeof(g.dialnumbers));
     persist_write_data(MINTICK_KEY, &g.min_tick, sizeof(g.min_tick));
+    persist_write_int(LASTTICK_KEY, (int)(unsigned)g.last_tick);
 }
 
 static inline int32_t clamp(int32_t val, int32_t max)
@@ -917,6 +950,10 @@ static void message_received(DictionaryIterator *iter, void *context)
         g.min_tick.w = fixed(clamp((t->value->int32 >> 8) & 0xFF, 16));
         g.min_tick.h = fixed(clamp(t->value->int32 & 0xFF, 32));
     }
+    if ((t = dict_find(iter, LASTTICK_KEY))) {
+        APP_LOG(APP_LOG_LEVEL_DEBUG, "lasttick: 0x%x", (int)t->value->uint8);
+        g.last_tick = t->value->uint8;
+    }
 
     save_settings();
 
@@ -1005,6 +1042,7 @@ static void init()
     g.hour_hand.col = 0xFF;
     g.hour_hand.w = fixed(8);
     g.hourhand_below = false;
+    g.last_tick = 0;
     g.hour_tick.w = fixed(4);
     g.hour_tick.h = fixed(5);
     g.hour_tick.col = 0xFF;
