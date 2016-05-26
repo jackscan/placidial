@@ -43,6 +43,9 @@ enum
     NUM_KEYS
 };
 
+#define DEMO 0
+#define BENCH 0
+
 struct hand_conf
 {
     int32_t w, r0, r1;
@@ -305,6 +308,12 @@ static void update_time(struct tm *t)
         g.day.ofmonth = t->tm_mday;
         g.day.update = true;
     }
+#if DEMO
+    g.hour = g.min % 24;
+    g.min = g.sec;
+    // g.day.ofmonth = g.sec % 32;
+    // g.day.update = true;
+#endif
 }
 
 static inline int absi(int i)
@@ -637,7 +646,25 @@ static void render(GContext *ctx)
 
 static void redraw(struct Layer *layer, GContext *ctx)
 {
+    // APP_LOG(APP_LOG_LEVEL_DEBUG, "redraw");
+#if BENCH
+    uint16_t start = time_ms(NULL, NULL);
+    for (int i = 0; i < 12; ++i)
+    {
+        g.hour = i;
+        for (int j = 0; j < 10; ++j)
+        {
+            g.min = j * 6;
+            render(ctx);
+        }
+    }
+    uint16_t end = time_ms(NULL, NULL);
+
+    if (end < start) end += 1000;
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "dt: %d", (end - start) * 10 / 12);
+#else
     render(ctx);
+#endif
 }
 
 static void tick_handler(struct tm *t, TimeUnits units_changed)
@@ -780,6 +807,9 @@ static void message_received(DictionaryIterator *iter, void *context)
         g.showsec = t->value->int32 != 0 ? -1 : 0;
         tick_timer_service_subscribe(g.showsec ? SECOND_UNIT : MINUTE_UNIT,
                                      tick_handler);
+ #if DEMO || BENCH
+        tick_timer_service_subscribe(SECOND_UNIT, tick_handler);
+ #endif
     }
     if ((t = dict_find(iter, SHOWDAY_KEY))) {
         APP_LOG(APP_LOG_LEVEL_DEBUG, "showday: %d", (int)t->value->int32);
@@ -905,6 +935,9 @@ static void window_load(Window *window)
     layer_set_update_proc(window_layer, redraw);
     tick_timer_service_subscribe(g.showsec ? SECOND_UNIT : MINUTE_UNIT,
                                  tick_handler);
+#if DEMO || BENCH
+    tick_timer_service_subscribe(SECOND_UNIT, tick_handler);
+#endif
     g.scanlines = NULL;
     g.status.batstate = battery_state_service_peek();
 
