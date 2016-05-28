@@ -41,6 +41,7 @@ enum
     HOURBELOW_KEY,
     MINTICK_KEY,
     LASTTICK_KEY,
+    FONTS_KEY,
     NUM_KEYS
 };
 
@@ -58,6 +59,14 @@ struct tick_conf
     int32_t w, h;
     uint8_t col;
     uint8_t show;
+};
+
+enum
+{
+    BLOCKY_FONT,
+    BLOCKY_SMALL_FONT,
+    SMOOTH_FONT,
+    SMOOTH_SMALL_FONT,
 };
 
 struct
@@ -104,6 +113,11 @@ struct
         uint8_t col;
         uint8_t show;
     } dialnumbers;
+
+    struct {
+        uint8_t day;
+        uint8_t dial;
+    } fontconf;
 
     struct bmpset dialfont;
 
@@ -171,7 +185,7 @@ static void draw_week(GBitmap *bmp, int x, int y)
 
 static void draw_day(GBitmap *bmp, int x, int y)
 {
-    int x0 = (x - g.day.font.w) & ~0x3;
+    int x0 = (x - g.day.font.w - 2) & ~0x3;
     int x1 = x0 + g.day.font.w + 4;
     int my = 2;
 
@@ -191,9 +205,9 @@ static struct rect get_day_rect(int px, int py)
 {
     int my = 2;
     return (struct rect){
-        (px - g.day.font.w) >> 2,
+        (px - g.day.font.w - 2) >> 2,
         py - g.day.font.h - my,
-        (px + g.day.font.w + 7) >> 2,
+        (px + g.day.font.w + 4) >> 2,
         py + 11 + my,
     };
 }
@@ -257,7 +271,7 @@ static void draw_dial_digits(GBitmap *bmp, int x, int y, int n, bool pad)
 
     if (pad || d10 != 0)
     {
-        int spc = g.dialfont.w / 3;
+        int spc = 2;
         int x0 = (x - g.dialfont.w - spc / 2);
         int x1 = x0 + g.dialfont.w + spc;
         draw_2bit_bmp(bmp, &g.dialfont, d10, x0, y0, colors);
@@ -727,6 +741,43 @@ static void tick_handler(struct tm *t, TimeUnits units_changed)
     layer_mark_dirty(window_get_root_layer(g.window));
 }
 
+static void load_bmpset(struct bmpset *set, uint32_t resid, int size)
+{
+    set->bmp = gbitmap_create_with_resource(resid);
+    struct GRect bounds = gbitmap_get_bounds(set->bmp);
+    set->w = bounds.size.w;
+    set->h = bounds.size.h / size;
+}
+
+static uint32_t font_to_resource_id(uint8_t fontid)
+{
+    switch (fontid)
+    {
+    case BLOCKY_FONT: return RESOURCE_ID_BLOCKY13;
+    case BLOCKY_SMALL_FONT: return RESOURCE_ID_BLOCKY9;
+    case SMOOTH_FONT: return RESOURCE_ID_DIGITS15;
+    case SMOOTH_SMALL_FONT: return RESOURCE_ID_DIGITS13;
+    default: return 0;
+    }
+}
+
+static void cleanup_fonts(void)
+{
+    if (g.day.font.bmp) gbitmap_destroy(g.day.font.bmp);
+    if (g.dialfont.bmp) gbitmap_destroy(g.dialfont.bmp);
+}
+
+static void load_fonts(void)
+{
+    cleanup_fonts();
+
+    uint32_t dayfontid = font_to_resource_id(g.fontconf.day);
+    uint32_t dialfontid = font_to_resource_id(g.fontconf.dial);
+
+    load_bmpset(&g.day.font, dayfontid, 10);
+    load_bmpset(&g.dialfont, dialfontid, 10);
+}
+
 static void read_settings(void)
 {
     APP_LOG(APP_LOG_LEVEL_DEBUG, "reading settings");
@@ -829,6 +880,12 @@ static void read_settings(void)
         g.last_tick = (uint8_t)persist_read_int(LASTTICK_KEY);
         APP_LOG(APP_LOG_LEVEL_DEBUG, "lasttick: 0x%x", (int)g.last_tick);
     }
+    if (persist_exists(FONTS_KEY))
+    {
+        persist_read_data(FONTS_KEY, &g.fontconf, sizeof(g.fontconf));
+        APP_LOG(APP_LOG_LEVEL_DEBUG, "fonts: %d, %d",
+                (int)g.fontconf.day, (int)g.fontconf.dial);
+    }
 }
 
 static void save_settings(void)
@@ -849,6 +906,7 @@ static void save_settings(void)
     persist_write_data(DIALNUMBERS_KEY, &g.dialnumbers, sizeof(g.dialnumbers));
     persist_write_data(MINTICK_KEY, &g.min_tick, sizeof(g.min_tick));
     persist_write_int(LASTTICK_KEY, (int)(unsigned)g.last_tick);
+    persist_write_data(FONTS_KEY, &g.fontconf, sizeof(g.fontconf));
 }
 
 static inline int32_t clamp(int32_t val, int32_t max)
@@ -954,6 +1012,13 @@ static void message_received(DictionaryIterator *iter, void *context)
         APP_LOG(APP_LOG_LEVEL_DEBUG, "lasttick: 0x%x", (int)t->value->uint8);
         g.last_tick = t->value->uint8;
     }
+    if ((t = dict_find(iter, FONTS_KEY))) {
+        APP_LOG(APP_LOG_LEVEL_DEBUG, "fonts: 0x%x", (int)t->value->uint32);
+        g.fontconf.dial = ((t->value->uint32 >> 8) & 0xFF);
+        g.fontconf.day = (t->value->uint32 & 0xFF);
+    }
+
+    load_fonts();
 
     save_settings();
 
@@ -980,14 +1045,6 @@ static void connection_handler(bool connected)
         }
         layer_mark_dirty(window_get_root_layer(g.window));
     }
-}
-
-static void load_bmpset(struct bmpset *set, uint32_t resid, int size)
-{
-    set->bmp = gbitmap_create_with_resource(resid);
-    struct GRect bounds = gbitmap_get_bounds(set->bmp);
-    set->w = bounds.size.w;
-    set->h = bounds.size.h / size;
 }
 
 static void window_load(Window *window)
@@ -1065,11 +1122,12 @@ static void init()
     g.statusconf.vibepattern = 3;
     g.dialnumbers.col = 0xAA;
     g.dialnumbers.show = 0;
+    g.fontconf.day = SMOOTH_FONT;
+    g.fontconf.dial = SMOOTH_SMALL_FONT;
 
     read_settings();
 
-    load_bmpset(&g.day.font, RESOURCE_ID_DIGITS15, 10);
-    load_bmpset(&g.dialfont, RESOURCE_ID_DIGITS13, 10);
+    load_fonts();
 
     g.window = window_create();
     window_set_window_handlers(g.window,
@@ -1082,8 +1140,7 @@ static void init()
 static void deinit()
 {
     window_destroy(g.window);
-    gbitmap_destroy(g.day.font.bmp);
-    gbitmap_destroy(g.dialfont.bmp);
+    cleanup_fonts();
 }
 
 int main(void)
