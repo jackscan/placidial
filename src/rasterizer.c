@@ -116,7 +116,7 @@ void draw_box(struct GBitmap *bmp, uint8_t color, int x, int y, int w, int h)
 })
 
 void draw_circle(struct GBitmap *bmp, uint8_t color, int32_t cx, int32_t cy,
-                 int32_t r, bool outline)
+                 int32_t r, bool outline, bool dark_bg)
 {
     int32_t half = (1 << (FIXED_SHIFT - 1));
     int smooth = 2;
@@ -131,10 +131,10 @@ void draw_circle(struct GBitmap *bmp, uint8_t color, int32_t cx, int32_t cy,
     int y0 = fixedfloor(cy - r1);
     int y1 = fixedceil(cy + r1);
 
-    if (dark_color(color))
-        DRAW_CIRCLE_LINES(y0, y1, blend_inv);
-    else
+    if (dark_bg)
         DRAW_CIRCLE_LINES(y0, y1, blend);
+    else
+        DRAW_CIRCLE_LINES(y0, y1, blend_inv);
 }
 
 static inline void update_scanline(struct scanline *line, int x0, int x1)
@@ -284,7 +284,8 @@ void draw_bg_rect(struct GBitmap *bmp, struct scanline *scanlines,
 
 void draw_rect(struct GBitmap *bmp, struct scanline *scanlines,
                uint8_t color, int32_t px, int32_t py,
-               int32_t dx, int32_t dy, int32_t len, int32_t w, bool outline)
+               int32_t dx, int32_t dy, int32_t len, int32_t w,
+               bool outline, bool dark_bg)
 {
     // length of (dx, dy) is assumed to be fixed(256)
     const int dshift = FIXED_SHIFT + 8;
@@ -322,10 +323,10 @@ void draw_rect(struct GBitmap *bmp, struct scanline *scanlines,
     int32_t pxdy = px * dy;
     int32_t pxdx = px * dx;
 
-    if (dark_color(color))
-        DRAW_RECT(y0, y1, y2, y3, blend_inv(line[x], color, a, od));
-    else
+    if (dark_bg)
         DRAW_RECT(y0, y1, y2, y3, blend(line[x], color, a, od));
+    else
+        DRAW_RECT(y0, y1, y2, y3, blend_inv(line[x], color, a, od));
 }
 
 void draw_2bit_bmp(struct GBitmap *bmp, struct bmpset *set, int n,

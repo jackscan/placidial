@@ -139,7 +139,7 @@ static inline uint32_t get_aa_colors(uint8_t bg, uint8_t col)
     int od = g.outline ? 3 : 4;
     uint32_t b = bg;
     uint32_t c = col;
-    if (dark_color(col))
+    if (! dark_color(bg))
         return (uint32_t)blend_inv(b, c, 1, od)
             | (((uint32_t)blend_inv(b, c, 2, od)) << 8)
             | (((uint32_t)blend_inv(b, c, 3, od)) << 16)
@@ -407,7 +407,7 @@ static void draw_hand(struct GBitmap *bmp,struct hand_conf *conf, int32_t mr,
     }
     else
         draw_rect(bmp, g.scanlines, conf->col, px, py, dx, dy, len, conf->w / 2,
-                  g.outline);
+                  g.outline, dark_color(g.bgcol));
 }
 
 static void render(GContext *ctx)
@@ -697,12 +697,14 @@ static void render(GContext *ctx)
         draw_hand(bmp, &g.hour_hand, mr, cx, cy, hour.dx, hour.dy, false);
     }
 
-    draw_circle(bmp, g.center[0].col, cx, cy, g.center[0].r, g.outline);
+    draw_circle(bmp, g.center[0].col, cx, cy, g.center[0].r, g.outline,
+                dark_color(g.bgcol));
 
     if (g.showsec)
     {
         draw_hand(bmp, &g.sec_hand, mr, cx, cy, sec.dx, sec.dy, false);
-        draw_circle(bmp, g.center[1].col, cx, cy, g.center[1].r, g.outline);
+        draw_circle(bmp, g.center[1].col, cx, cy, g.center[1].r, g.outline,
+                    dark_color(g.bgcol));
     }
 
 
