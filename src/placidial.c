@@ -77,7 +77,7 @@ struct
     int hour, min, sec;
 
     int showsec;
-
+    int seccount;
     int num_scanlines;
     struct scanline *scanlines;
 
@@ -411,6 +411,11 @@ static void draw_hand(struct GBitmap *bmp,struct hand_conf *conf, int32_t mr,
                   g.outline, dark_color(g.bgcol));
 }
 
+static bool show_seconds(void)
+{
+    return g.showsec < 0 || (g.showsec > 0 && g.seccount > 0);
+}
+
 static void render(GContext *ctx)
 {
     GBitmap *bmp = graphics_capture_frame_buffer(ctx);
@@ -519,7 +524,7 @@ static void render(GContext *ctx)
     }
 
     // second
-    if (g.showsec)
+    if (show_seconds())
     {
         int32_t a = (g.sec * TRIG_MAX_ANGLE) / 60;
         int32_t sina = sin_lookup(a);
@@ -620,8 +625,9 @@ static void render(GContext *ctx)
         int round60 = (g.last_tick & 0x1) == 0 ? 30 : 0;
         int round5 = (g.last_tick & 0x2) == 0 ? 2 : 0;
         int hourmark = ((g.hour * 60 + g.min + round60) % 720) * 12 / 720;
-        int32_t c =
-            g.showsec ? ((g.sec + 2) % 60) * 12 / 60 * TRIG_MAX_ANGLE / 12 : -1;
+        int32_t c = show_seconds()
+                        ? ((g.sec + 2) % 60) * 12 / 60 * TRIG_MAX_ANGLE / 12
+                        : -1;
         int32_t b = g.hour_tick.show ? hourmark * TRIG_MAX_ANGLE / 12 : -1;
         if (c == b) c = -1;
 
@@ -701,7 +707,7 @@ static void render(GContext *ctx)
     draw_circle(bmp, g.center[0].col, cx, cy, g.center[0].r, g.outline,
                 dark_color(g.bgcol));
 
-    if (g.showsec)
+    if (show_seconds())
     {
         draw_hand(bmp, &g.sec_hand, mr, cx, cy, sec.dx, sec.dy, false);
         draw_circle(bmp, g.center[1].col, cx, cy, g.center[1].r, g.outline,
@@ -737,11 +743,18 @@ static void redraw(struct Layer *layer, GContext *ctx)
 
 static void tick_handler(struct tm *t, TimeUnits units_changed)
 {
-    if (g.showsec > 0 && --g.showsec == 0)
+    if (g.seccount > 0 && --g.seccount == 0) {
         tick_timer_service_subscribe(MINUTE_UNIT, tick_handler);
+    }
     update_time(t);
     g.status.batstate = battery_state_service_peek();
     layer_mark_dirty(window_get_root_layer(g.window));
+}
+
+static void tap_handler(AccelAxisType axis, int32_t direction)
+{
+    g.seccount = g.showsec + 1;
+    tick_timer_service_subscribe(SECOND_UNIT, tick_handler);
 }
 
 static void load_bmpset(struct bmpset *set, uint32_t resid, int size)
@@ -786,8 +799,11 @@ static void read_settings(void)
     APP_LOG(APP_LOG_LEVEL_DEBUG, "reading settings");
     if (persist_exists(SHOWSEC_KEY))
     {
-        g.showsec = persist_read_bool(SHOWSEC_KEY) ? -1 : 0;
-        APP_LOG(APP_LOG_LEVEL_DEBUG, "showsec: %i", g.showsec != 0);
+        g.showsec = persist_read_int(SHOWSEC_KEY);
+        // convert old setting to new timeout setting
+        if (g.showsec == 1)
+            g.showsec = -1;
+        APP_LOG(APP_LOG_LEVEL_DEBUG, "showsec: %i", g.showsec);
     }
     if (persist_exists(SHOWDAY_KEY))
     {
@@ -894,7 +910,7 @@ static void read_settings(void)
 static void save_settings(void)
 {
     APP_LOG(APP_LOG_LEVEL_DEBUG, "saving settings");
-    persist_write_bool(SHOWSEC_KEY, g.showsec != 0);
+    persist_write_int(SHOWSEC_KEY, g.showsec);
     persist_write_bool(SHOWDAY_KEY, g.day.show);
     persist_write_bool(OUTLINE_KEY, g.outline);
     persist_write_bool(HOURBELOW_KEY, g.hourhand_below);
@@ -963,15 +979,28 @@ static inline uint32_t clamp(uint32_t val, uint32_t max)
 static void message_received(DictionaryIterator *iter, void *context)
 {
     Tuple *t;
-    if ((t = dict_find(iter, MESSAGE_KEY_secshow))) {
-        APP_LOG(APP_LOG_LEVEL_DEBUG, "showsec: %d", (int)t->value->int32);
-        g.showsec = t->value->int32 != 0 ? -1 : 0;
-        tick_timer_service_subscribe(g.showsec ? SECOND_UNIT : MINUTE_UNIT,
-                                     tick_handler);
- #if DEMO || BENCH
-        tick_timer_service_subscribe(SECOND_UNIT, tick_handler);
- #endif
+
+    uint32_t secshow = 0;
+    uint32_t sectimeout = 0;
+    CONFIG_SET_UINT(secshow, showsec, 2);
+    CONFIG_SET_UINT(sectimeout, sectimeout, 120);
+
+    switch (secshow) {
+    default:
+    case 0: g.showsec = 0; break;
+    case 1: g.showsec = -1; break;
+    case 2: g.showsec = sectimeout; break;
     }
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "showsec: %d", (int)g.showsec);
+
+    if (g.showsec > 0) accel_tap_service_subscribe(tap_handler);
+    else accel_tap_service_unsubscribe();
+
+    tick_timer_service_subscribe(show_seconds() ? SECOND_UNIT : MINUTE_UNIT,
+                                 tick_handler);
+ #if DEMO || BENCH
+    tick_timer_service_subscribe(SECOND_UNIT, tick_handler);
+ #endif
 
     if (CONFIG_SET_TOGGLE(g.day.show, dayshow))
         g.day.update = true;
@@ -1081,7 +1110,10 @@ static void window_load(Window *window)
 {
     Layer *window_layer = window_get_root_layer(window);
     layer_set_update_proc(window_layer, redraw);
-    tick_timer_service_subscribe(g.showsec ? SECOND_UNIT : MINUTE_UNIT,
+
+    if (g.showsec > 0) accel_tap_service_subscribe(tap_handler);
+
+    tick_timer_service_subscribe(show_seconds() ? SECOND_UNIT : MINUTE_UNIT,
                                  tick_handler);
 #if DEMO || BENCH
     tick_timer_service_subscribe(SECOND_UNIT, tick_handler);
@@ -1101,6 +1133,7 @@ static void window_unload(Window *window)
     battery_state_service_unsubscribe();
     connection_service_unsubscribe();
     tick_timer_service_unsubscribe();
+    accel_tap_service_unsubscribe();
     free(g.scanlines);
     g.scanlines = NULL;
 }
@@ -1115,6 +1148,7 @@ static void init()
     g.bgcol = 0xC0;
     g.outline = true;
     g.showsec = 0;
+    g.seccount = 0;
     g.day.show = true;
     g.sec_hand.w = fixed(3);
     g.sec_hand.r0 = 40;

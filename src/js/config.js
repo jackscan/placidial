@@ -269,10 +269,29 @@ module.exports = [{
         "type": "heading",
         "defaultValue": "Second Hand"
     }, {
-        "type": "toggle",
-        "messageKey": "secshow",
+        "type": "radiogroup",
+        "messageKey": "showsec",
         "label": "Show",
-        "defaultValue": false
+        "defaultValue": 0,
+        "options": [{
+            "label": "Never",
+            "value": 0
+        }, {
+            "label": "Always",
+            "value": 1
+        }, {
+            "label": "On Shake",
+            "value": 2
+        }]
+    }, {
+        "type": "slider",
+        "messageKey": "sectimeout",
+        "defaultValue": 10,
+        "label": "Timeout (s)",
+        "description": "Timeout in seconds for displaying second hand when 'On Shake' is set.",
+        "min": 5,
+        "max": 120,
+        "step": 5
     }, {
         "type": "slider",
         "messageKey": "seclen",
