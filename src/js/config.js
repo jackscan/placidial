@@ -272,7 +272,7 @@ module.exports = [{
         "type": "radiogroup",
         "messageKey": "showsec",
         "label": "Show",
-        "defaultValue": 0,
+        "defaultValue": "0",
         "options": [{
             "label": "Never",
             "value": 0
