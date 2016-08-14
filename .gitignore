@@ -12,3 +12,5 @@ build
 
 # Ignore atom build file
 .atom-build.*
+
+node_modules/

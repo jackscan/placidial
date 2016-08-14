@@ -41,9 +41,10 @@ enum
     HOURBELOW_KEY,
     MINTICK_KEY,
     LASTTICK_KEY,
-    FONTS_KEY,
-    NUM_KEYS
+    FONTS_KEY
 };
+
+#define NUM_MESSAGE_KEYS    42
 
 #define DEMO 0
 #define BENCH 0
@@ -911,15 +912,58 @@ static void save_settings(void)
     persist_write_data(FONTS_KEY, &g.fontconf, sizeof(g.fontconf));
 }
 
-static inline int32_t clamp(int32_t val, int32_t max)
+static inline uint32_t clamp(uint32_t val, uint32_t max)
 {
     return val < max ? val : max;
 }
 
+#define CONFIG_SET_UINT(C, K, M) ({\
+    if ((t = dict_find(iter, MESSAGE_KEY_##K))) { \
+        int32_t n = t->value->int32; \
+        if (t->type == TUPLE_CSTRING) \
+            n = atoi(t->value->cstring); \
+        APP_LOG(APP_LOG_LEVEL_DEBUG, #K ": 0x%x", (int)n); \
+        C = clamp(n & 0xFF, M); \
+    } \
+    t != NULL; \
+})
+
+#define CONFIG_SET_LENGTH(C, K, M) ({\
+    if ((t = dict_find(iter, MESSAGE_KEY_##K))) { \
+        APP_LOG(APP_LOG_LEVEL_DEBUG, #K ": 0x%x", (int)t->value->uint32); \
+        C = clamp((t->value->uint32 * 255 / 100), M); \
+    } \
+    t != NULL; \
+})
+
+#define CONFIG_SET_WIDTH(C, K, M, S) ({\
+    if ((t = dict_find(iter, MESSAGE_KEY_##K))) { \
+        APP_LOG(APP_LOG_LEVEL_DEBUG, #K ": 0x%x", (int)t->value->uint32); \
+        C = clamp(t->value->int32 & 0xFF, M) << (FIXED_SHIFT - S); \
+    } \
+    t != NULL; \
+})
+
+#define CONFIG_SET_TOGGLE(C, K) ({\
+    if ((t = dict_find(iter, MESSAGE_KEY_##K))) { \
+        APP_LOG(APP_LOG_LEVEL_DEBUG, #K": %d", (int)t->value->int32); \
+        C = t->value->int32 != 0; \
+    } \
+    t != NULL; \
+})
+
+#define CONFIG_SET_COLOR(C, K) ({\
+    if ((t = dict_find(iter, MESSAGE_KEY_##K))) { \
+        C = GColorFromHEX(t->value->int32).argb; \
+        APP_LOG(APP_LOG_LEVEL_DEBUG, #K": 0x%x", (int)C); \
+    } \
+    t != NULL; \
+})
+
 static void message_received(DictionaryIterator *iter, void *context)
 {
     Tuple *t;
-    if ((t = dict_find(iter, SHOWSEC_KEY))) {
+    if ((t = dict_find(iter, MESSAGE_KEY_secshow))) {
         APP_LOG(APP_LOG_LEVEL_DEBUG, "showsec: %d", (int)t->value->int32);
         g.showsec = t->value->int32 != 0 ? -1 : 0;
         tick_timer_service_subscribe(g.showsec ? SECOND_UNIT : MINUTE_UNIT,
@@ -928,97 +972,81 @@ static void message_received(DictionaryIterator *iter, void *context)
         tick_timer_service_subscribe(SECOND_UNIT, tick_handler);
  #endif
     }
-    if ((t = dict_find(iter, SHOWDAY_KEY))) {
-        APP_LOG(APP_LOG_LEVEL_DEBUG, "showday: %d", (int)t->value->int32);
-        g.day.show = t->value->int32 != 0;
+
+    if (CONFIG_SET_TOGGLE(g.day.show, dayshow))
         g.day.update = true;
-    }
-    if ((t = dict_find(iter, OUTLINE_KEY))) {
-        APP_LOG(APP_LOG_LEVEL_DEBUG, "outline: %d", (int)t->value->int32);
-        g.outline = t->value->int32 != 0;
-    }
-    if ((t = dict_find(iter, BGCOL_KEY))) {
-        APP_LOG(APP_LOG_LEVEL_DEBUG, "bgcol: 0x%x", (int)t->value->uint8);
-        g.bgcol = t->value->uint8;
+
+    CONFIG_SET_TOGGLE(g.outline, outline);
+
+    if (CONFIG_SET_COLOR(g.bgcol, bgcol))
+    {
         free(g.scanlines);
         g.scanlines = NULL;
     }
-    if ((t = dict_find(iter, HOUR_KEY))) {
-        APP_LOG(APP_LOG_LEVEL_DEBUG, "hour: 0x%x", (int)t->value->uint32);
-        g.hour_hand.r0 = clamp(t->value->int32 & 0xFF, 230);
-        g.hour_hand.r1 = clamp((t->value->int32 >> 8) & 0xFF, 230);
-        g.hour_hand.w = (t->value->int32 >> 16) & 0xFF;
-        g.hour_hand.col = (t->value->uint32 >> 24) & 0xFF;
-    }
-    if ((t = dict_find(iter, MIN_KEY))) {
-        APP_LOG(APP_LOG_LEVEL_DEBUG, "min: 0x%x", (int)t->value->uint32);
-        g.min_hand.r0 = clamp(t->value->int32 & 0xFF, 230);
-        g.min_hand.r1 = clamp((t->value->int32 >> 8) & 0xFF, 230);
-        g.min_hand.w = (t->value->int32 >> 16) & 0xFF;
-        g.min_hand.col = (t->value->uint32 >> 24) & 0xFF;
-    }
-    if ((t = dict_find(iter, SEC_KEY))) {
-        APP_LOG(APP_LOG_LEVEL_DEBUG, "sec: 0x%x", (int)t->value->uint32);
-        g.sec_hand.r0 = clamp(t->value->int32 & 0xFF, 230);
-        g.sec_hand.r1 = clamp((t->value->int32 >> 8) & 0xFF, 230);
-        g.sec_hand.w = (t->value->int32 >> 16) & 0xFF;
-        g.sec_hand.col = (t->value->uint32 >> 24) & 0xFF;
-    }
-    if ((t = dict_find(iter, CENTER_KEY))) {
-        APP_LOG(APP_LOG_LEVEL_DEBUG, "center: 0x%x", (int)t->value->uint32);
-        g.center[0].r =
-            clamp((t->value->int32 >> 24) & 0xFF, 32) << (FIXED_SHIFT - 1);
-        g.center[0].col = (t->value->uint32 >> 16) & 0xFF;
-        g.center[1].r =
-            clamp((t->value->int32 >> 8) & 0xFF, 32) << (FIXED_SHIFT - 1);
-        g.center[1].col = t->value->uint32 & 0xFF;
-    }
-    if ((t = dict_find(iter, HOURTICK_KEY))) {
-        APP_LOG(APP_LOG_LEVEL_DEBUG, "hourtick: 0x%x", (int)t->value->uint32);
-        g.hour_tick.show = ((t->value->uint32 >> 24) & 0xFF);
-        g.hour_tick.col = ((t->value->uint32 >> 16) & 0xFF);
-        g.hour_tick.w = fixed(clamp((t->value->int32 >> 8) & 0xFF, 16));
-        g.hour_tick.h = fixed(clamp(t->value->int32 & 0xFF, 32));
-    }
-    if ((t = dict_find(iter, DAYCOLORS_KEY))) {
-        APP_LOG(APP_LOG_LEVEL_DEBUG, "daycolors: 0x%x", (int)t->value->uint32);
-        g.daycolors.dayofmonth = (t->value->uint32 >> 24) & 0xFF;
-        g.daycolors.weekday = (t->value->uint32 >> 16) & 0xFF;
-        g.daycolors.sunday = (t->value->uint32 >> 8) & 0xFF;
-        g.daycolors.today = t->value->uint32 & 0xFF;
-    }
-    if ((t = dict_find(iter, STATUSCONF_KEY))) {
-        APP_LOG(APP_LOG_LEVEL_DEBUG, "statusconf: 0x%x", (int)t->value->uint32);
-        g.statusconf.showconn = ((t->value->uint32 >> 24) & 0xFF) != 0;
-        g.statusconf.vibepattern = (t->value->uint32 >> 16) & 0xFF;
-        g.statusconf.warnlevel = (t->value->uint32 >> 8) & 0xFF;
-        g.statusconf.color = t->value->uint32 & 0xFF;
-    }
-    if ((t = dict_find(iter, DIALNUMBERS_KEY))) {
-        APP_LOG(APP_LOG_LEVEL_DEBUG, "dialnums: 0x%x", (int)t->value->uint32);
-        g.dialnumbers.show = (t->value->uint32 >> 8) & 0xFF;
-        g.dialnumbers.col = t->value->uint32 & 0xFF;
-    }
-    if ((t = dict_find(iter, HOURBELOW_KEY))) {
-        APP_LOG(APP_LOG_LEVEL_DEBUG, "hourbelow: %d", (int)t->value->int32);
-        g.hourhand_below = t->value->int32 != 0;
-    }
-    if ((t = dict_find(iter, MINTICK_KEY))) {
-        APP_LOG(APP_LOG_LEVEL_DEBUG, "mintick: 0x%x", (int)t->value->uint32);
-        g.min_tick.show = ((t->value->uint32 >> 24) & 0xFF);
-        g.min_tick.col = ((t->value->uint32 >> 16) & 0xFF);
-        g.min_tick.w = fixed(clamp((t->value->int32 >> 8) & 0xFF, 16));
-        g.min_tick.h = fixed(clamp(t->value->int32 & 0xFF, 32));
-    }
-    if ((t = dict_find(iter, LASTTICK_KEY))) {
-        APP_LOG(APP_LOG_LEVEL_DEBUG, "lasttick: 0x%x", (int)t->value->uint8);
-        g.last_tick = t->value->uint8;
-    }
-    if ((t = dict_find(iter, FONTS_KEY))) {
-        APP_LOG(APP_LOG_LEVEL_DEBUG, "fonts: 0x%x", (int)t->value->uint32);
-        g.fontconf.dial = ((t->value->uint32 >> 8) & 0xFF);
-        g.fontconf.day = (t->value->uint32 & 0xFF);
-    }
+
+    CONFIG_SET_TOGGLE(g.hourhand_below, hourbelowmin);
+
+    CONFIG_SET_LENGTH(g.hour_hand.r0, hourext, 85);
+    CONFIG_SET_LENGTH(g.hour_hand.r1, hourlen, 230);
+    CONFIG_SET_WIDTH(g.hour_hand.w, hourwidth, 16, 0);
+    CONFIG_SET_COLOR(g.hour_hand.col, hourcol);
+
+    CONFIG_SET_LENGTH(g.min_hand.r0, minext, 85);
+    CONFIG_SET_LENGTH(g.min_hand.r1, minlen, 230);
+    CONFIG_SET_WIDTH(g.min_hand.w, minwidth, 16, 0);
+    CONFIG_SET_COLOR(g.min_hand.col, mincol);
+
+    CONFIG_SET_LENGTH(g.sec_hand.r0, secext, 85);
+    CONFIG_SET_LENGTH(g.sec_hand.r1, seclen, 230);
+    CONFIG_SET_WIDTH(g.sec_hand.w, secwidth, 16, 0);
+    CONFIG_SET_COLOR(g.sec_hand.col, seccol);
+
+    CONFIG_SET_WIDTH(g.center[0].r, centerwidth, 32, 1);
+    CONFIG_SET_COLOR(g.center[0].col, centercol);
+    CONFIG_SET_WIDTH(g.center[1].r, seccenterwidth, 32, 1);
+    CONFIG_SET_COLOR(g.center[1].col, seccentercol);
+
+    uint32_t hourtick = 0;
+    CONFIG_SET_UINT(hourtick, hourtickshow, 2);
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "hourtick: 0x%x", (int)hourtick);
+    CONFIG_SET_COLOR(g.hour_tick.col, hourtickcol);
+    CONFIG_SET_WIDTH(g.hour_tick.w, hourtickwidth, 16, 0);
+    CONFIG_SET_WIDTH(g.hour_tick.h, hourticklen, 32, 0);
+    g.hour_tick.show = hourtick != 0;
+
+    uint32_t mintick = 0;
+    CONFIG_SET_UINT(mintick, mintickshow, 2);
+    CONFIG_SET_COLOR(g.min_tick.col, mintickcol);
+    CONFIG_SET_WIDTH(g.min_tick.w, mintickwidth, 16, 0);
+    CONFIG_SET_WIDTH(g.min_tick.h, minticklen, 32, 0);
+    g.min_tick.show = mintick != 0;
+
+    g.last_tick = (hourtick & 1) | ((mintick & 1) << 1);
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "lasttick: 0x%x", (int)g.last_tick);
+
+    CONFIG_SET_COLOR(g.daycolors.dayofmonth, daycol);
+    CONFIG_SET_COLOR(g.daycolors.weekday, weekcol);
+    CONFIG_SET_COLOR(g.daycolors.sunday, sundaycol);
+    CONFIG_SET_COLOR(g.daycolors.today, todaycol);
+
+    CONFIG_SET_TOGGLE(g.statusconf.showconn, statusshow);
+    CONFIG_SET_COLOR(g.statusconf.color, statuscol);
+    CONFIG_SET_UINT(g.statusconf.vibepattern, statusvibe, 3);
+    CONFIG_SET_UINT(g.statusconf.warnlevel, batwarn, 100);
+
+    bool showhournum = false, showminnum = false;
+    CONFIG_SET_TOGGLE(showhournum, hournumshow);
+    CONFIG_SET_TOGGLE(showminnum, minnumshow);
+    CONFIG_SET_COLOR(g.dialnumbers.col, dialnumcol);
+    g.dialnumbers.show = (int)showhournum | ((int)showminnum << 1);
+
+    uint32_t dayfont = 0;
+    CONFIG_SET_UINT(dayfont, dayfont, 1);
+    g.fontconf.day = dayfont * 2;
+
+    uint32_t dialfont = 0;
+    CONFIG_SET_UINT(dialfont, dialfont, 1);
+    g.fontconf.dial = dialfont * 2 + 1;
 
     load_fonts();
 
@@ -1081,7 +1109,7 @@ static void init()
 {
     app_message_register_inbox_received(message_received);
     // needed inbox size, see note at dict_calc_buffer_size
-    uint32_t insize = NUM_KEYS * (7 + sizeof(int32_t)) + 1;
+    uint32_t insize = NUM_MESSAGE_KEYS * (7 + sizeof(int32_t)) + 1;
     app_message_open(insize, 0);
 
     g.bgcol = 0xC0;
@@ -1097,19 +1125,19 @@ static void init()
     g.min_hand.r1 = 210;
     g.min_hand.col = 0xFF;
     g.hour_hand.r0 = 0;
-    g.hour_hand.r1 = 160;
+    g.hour_hand.r1 = 130;
     g.hour_hand.col = 0xFF;
     g.hour_hand.w = fixed(8);
     g.hourhand_below = false;
-    g.last_tick = 0;
+    g.last_tick = 2;
     g.hour_tick.w = fixed(4);
-    g.hour_tick.h = fixed(5);
+    g.hour_tick.h = fixed(6);
     g.hour_tick.col = 0xFF;
     g.hour_tick.show = 1;
     g.min_tick.w = fixed(3);
-    g.min_tick.h = fixed(4);
-    g.min_tick.col = 0xFF;
-    g.min_tick.show = 0;
+    g.min_tick.h = fixed(5);
+    g.min_tick.col = 0xDB;
+    g.min_tick.show = 1;
     g.center[0].col = 0xFF;
     g.center[0].r = fixed(7);
     g.center[1].col = 0xF0;
