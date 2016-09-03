@@ -993,6 +993,7 @@ static void message_received(DictionaryIterator *iter, void *context)
     }
     APP_LOG(APP_LOG_LEVEL_DEBUG, "showsec: %d", (int)g.showsec);
 
+    g.seccount = 0;
     if (g.showsec > 0) accel_tap_service_subscribe(tap_handler);
     else accel_tap_service_unsubscribe();
 
