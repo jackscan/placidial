@@ -256,7 +256,6 @@ void draw_bg_rect(struct GBitmap *bmp, struct scanline *scanlines,
 
     int32_t half = (1 << (FIXED_SHIFT - 1));
 
-    int od = 4;
     int smooth = 2;
     int32_t fs2 = fixed(smooth)/2;
     int32_t wi = w - fs2;
