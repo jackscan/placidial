@@ -1189,7 +1189,7 @@ static void init()
     g.center[1].r = fixed(4);
     g.daycolors.dayofmonth = 0xFF;
     g.daycolors.weekday = 0xFF;
-    g.daycolors.sunday = 0xDB;
+    g.daycolors.sunday = 0xCB;
     g.daycolors.today = 0xF0;
     g.statusconf.color = 0xFF;
     g.statusconf.showconn = true;

@@ -177,7 +177,7 @@ module.exports = [{
     }, {
         "type": "color",
         "messageKey": "sundaycol",
-        "defaultValue": "0x0FF0FF",
+        "defaultValue": "0x00AAFF",
         "label": "Sunday",
         "sunlight": false
     }, {
