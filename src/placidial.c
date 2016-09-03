@@ -186,7 +186,7 @@ static void draw_week(GBitmap *bmp, int x, int y)
 
 static void draw_day(GBitmap *bmp, int x, int y)
 {
-    int x0 = (x - g.day.font.w - 2) & ~0x3;
+    int x0 = (x - g.day.font.w - 2);
     int x1 = x0 + g.day.font.w + 4;
     int my = 2;
 
@@ -196,8 +196,16 @@ static void draw_day(GBitmap *bmp, int x, int y)
     int d01 = g.day.ofmonth - d10 * 10;
     uint32_t colors = get_colors(g.bgcol, g.daycolors.dayofmonth);
     int y0 = y - g.day.font.h - my;
-    draw_2bit_bmp_aligned(bmp, &g.day.font, d10, x0, y0, colors);
-    draw_2bit_bmp_aligned(bmp, &g.day.font, d01, x1, y0, colors);
+    if (x0 & 0x3)
+    {
+        draw_2bit_bmp(bmp, &g.day.font, d10, x0, y0, colors);
+        draw_2bit_bmp(bmp, &g.day.font, d01, x1, y0, colors);
+    }
+    else
+    {
+        draw_2bit_bmp_aligned(bmp, &g.day.font, d10, x0, y0, colors);
+        draw_2bit_bmp_aligned(bmp, &g.day.font, d01, x1, y0, colors);
+    }
 }
 
 struct rect { int x0, y0, x1, y1; };
