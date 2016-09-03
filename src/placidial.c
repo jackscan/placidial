@@ -424,7 +424,7 @@ static bool show_seconds(void)
     return g.showsec < 0 || (g.showsec > 0 && g.seccount > 0);
 }
 
-static void render(GContext *ctx)
+static void render(GContext *ctx, GRect bounds)
 {
     GBitmap *bmp = graphics_capture_frame_buffer(ctx);
     if (bmp == NULL)
@@ -440,7 +440,8 @@ static void render(GContext *ctx)
         update_time(localtime(&t));
     }
 
-    GRect bounds = gbitmap_get_bounds(bmp);
+    GRect bmpbounds = gbitmap_get_bounds(bmp);
+    grect_clip(&bounds, &bmpbounds);
 
     int16_t w2 = bounds.size.w / 2;
     int16_t h2 = bounds.size.h / 2;
@@ -729,6 +730,7 @@ static void render(GContext *ctx)
 static void redraw(struct Layer *layer, GContext *ctx)
 {
     // APP_LOG(APP_LOG_LEVEL_DEBUG, "redraw");
+    GRect bounds = layer_get_unobstructed_bounds(layer);
 #if BENCH
     uint16_t start = time_ms(NULL, NULL);
     for (int i = 0; i < 12; ++i)
@@ -737,7 +739,7 @@ static void redraw(struct Layer *layer, GContext *ctx)
         for (int j = 0; j < 10; ++j)
         {
             g.min = j * 6;
-            render(ctx);
+            render(ctx, bounds);
         }
     }
     uint16_t end = time_ms(NULL, NULL);
@@ -745,7 +747,7 @@ static void redraw(struct Layer *layer, GContext *ctx)
     if (end < start) end += 1000;
     APP_LOG(APP_LOG_LEVEL_DEBUG, "dt: %d", (end - start) * 10 / 12);
 #else
-    render(ctx);
+    render(ctx, bounds);
 #endif
 }
 
