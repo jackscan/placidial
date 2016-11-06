@@ -1255,7 +1255,7 @@ static void init()
 
     g.bgcol = 0xC0;
     g.outline = true;
-    g.showsec = 0;
+    g.showsec = -1;
     g.seccount = 0;
     g.day.show = true;
     g.sec_hand.w = fixed(3);
