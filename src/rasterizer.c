@@ -516,8 +516,6 @@ void draw_hstrip(struct GBitmap *bmp, struct scanline *scanlines,
 
     int32_t sdy = ((dx > 0 ? ws0 : -ws0) - dy * fs2) / dx;
     int y0 = fixedfloor(py - sdy);
-    int y1 = fixedceil(py + sdy);
-    int y2 = fixedfloor(py + ((dy * len) >> dshift) - sdy);
     int y3 = fixedceil(py + ((dy * len) >> dshift) + sdy);
 
     int32_t pxdy = px * dy;
