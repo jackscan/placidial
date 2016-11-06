@@ -110,6 +110,8 @@ struct
 
     struct tick_conf hour_tick, min_tick;
 
+    // uint8_t rounded_rect;
+
     struct {
         uint8_t col;
         uint8_t show;
@@ -297,8 +299,13 @@ static void draw_dial_digits(GBitmap *bmp, int x, int y, int n, bool pad)
     }
 }
 
-static void draw_tick(GBitmap *bmp, struct tick_conf *conf,
-                      int cx, int cy, int a, int s)
+static inline int absi(int i)
+{
+    return i < 0 ? -i : i;
+}
+
+static void draw_circle_tick(GBitmap *bmp, struct tick_conf *conf,
+                             int32_t cx, int32_t cy, int a, int s)
 {
     if (conf->h > 0 && conf->w > 0)
     {
@@ -314,6 +321,100 @@ static void draw_tick(GBitmap *bmp, struct tick_conf *conf,
 
         draw_bg_rect(bmp, g.scanlines, colors, px, py, dx, dy, conf->h,
                      conf->w / 2);
+    }
+}
+
+/*
+static void draw_rect_tick(GBitmap *bmp, struct tick_conf *conf,
+                           int32_t cx, int32_t cy, int a,
+                           int32_t w2, int32_t h2, int32_t r)
+{
+    if (conf->h > 0 && conf->w > 0)
+    {
+        int32_t sina = sin_lookup(a);
+        int32_t cosa = cos_lookup(a);
+
+        int32_t ax = absi(sina);
+        int32_t ay = absi(cosa);
+
+        int32_t dx = -sina * fixed(256) / TRIG_MAX_RATIO;
+        int32_t dy = cosa * fixed(256) / TRIG_MAX_RATIO;
+
+        uint32_t colors = get_aa_colors(g.bgcol, conf->col);
+
+        if (ax * (h2 - r) > ay * w2)
+        {
+            int32_t w2h = w2 - conf->h;
+            int32_t px = cx + (dx < 0 ? w2h : -w2h);
+            int32_t py = cy - cosa * w2h / ax;
+
+            draw_hstrip(bmp, g.scanlines, colors, px, py, -dx, -dy,
+                        conf->h, conf->w / 2);
+        }
+        else if (ax * h2 < ay * (w2 - r))
+        {
+            int32_t h2h = h2 - conf->h;
+            int32_t px = cx + sina * h2h / ay;
+            int32_t py = cy + (dy < 0 ? h2h : -h2h);
+
+            draw_vstrip(bmp, g.scanlines, colors, px, py, -dx, -dy,
+                        conf->h, conf->w / 2);
+        }
+        else
+        {
+            int32_t w2h = w2 - conf->h;
+            int32_t h2h = h2 - conf->h;
+
+            // normal of direction
+            // shorten normal to avoid overflow
+            int32_t nx = dy >> 1;
+            int32_t ny = -dx >> 1;
+            int32_t snx2 = (nx * nx);
+            int32_t ny2 = (ny * ny) >> FIXED_SHIFT;
+            // vector from corner circle center to watchface center
+            int32_t ex = (dx > 0 ? w2h - r : r - w2h);
+            int32_t ey = (dy > 0 ? h2h - r : r - h2h);
+            int32_t sen = (ex * nx + ey * ny);
+            int32_t en = sen >> FIXED_SHIFT;
+            int32_t r2 = (r * r) >> FIXED_SHIFT;
+
+            int32_t a = fixed(1) + snx2 / ny2;
+            int32_t b = -en * nx / ny2;
+            int32_t c = en * en / ny2 - r2;
+
+            int32_t sqrt = sqrti(b * b - a * c);
+
+            // (x,y) of intersection relative to corner circle center
+            int32_t x = (((dx < 0 ? sqrt : - sqrt) - b) << FIXED_SHIFT) / a;
+            int32_t y = (sen - x * nx) / ny;
+            int32_t px = cx - ex + x;
+            int32_t py = cy - ey + y;
+
+            draw_bg_rect(bmp, g.scanlines, colors, px, py, -dx, -dy,
+                         conf->h, conf->w / 2);
+        }
+    }
+}
+*/
+
+static void draw_tick(GBitmap *bmp, struct tick_conf *conf,
+                      int32_t cx, int32_t cy, int a,
+                      int w2, int h2, int32_t s)
+{
+    int r = w2 < h2 ? w2 : h2;
+
+    /*
+    if (g.rounded_rect > 0 && g.rounded_rect < r)
+    {
+        int32_t sw = s * w2;
+        int32_t sh = s * h2;
+        int32_t fr = fixed(g.rounded_rect);
+        draw_rect_tick(bmp, conf, cx, cy, a, sw, sh, fr);
+    }
+    else
+    */
+    {
+        draw_circle_tick(bmp, conf, cx, cy, a, s * r);
     }
 }
 
@@ -348,11 +449,6 @@ static void update_time(struct tm *t)
     // g.day.ofmonth = g.sec % 32;
     // g.day.update = true;
 #endif
-}
-
-static inline int absi(int i)
-{
-    return i < 0 ? -i : i;
 }
 
 static inline int sector(int dx, int dy)
@@ -629,7 +725,7 @@ static void render(GContext *ctx, GRect bounds)
 
     // dial marker
     {
-        int32_t s = mr * 15 / 16;
+        int32_t s = fixed(15) / 16;
 
         int round60 = (g.last_tick & 0x1) == 0 ? 30 : 0;
         int round5 = (g.last_tick & 0x2) == 0 ? 2 : 0;
@@ -647,7 +743,7 @@ static void render(GContext *ctx, GRect bounds)
             if (c == a || c == a) c = -1;
 
             if (g.hour_tick.show)
-                draw_tick(bmp, &g.hour_tick, cx, cy, a, s);
+                draw_tick(bmp, &g.hour_tick, cx, cy, a, w2, h2, s);
 
             if (g.min_tick.show)
             {
@@ -658,19 +754,19 @@ static void render(GContext *ctx, GRect bounds)
                 for (int i = m1; i <= m2; ++i)
                 {
                     int32_t a = (i * TRIG_MAX_ANGLE / 60) % TRIG_MAX_ANGLE;
-                    draw_tick(bmp, &g.min_tick, cx, cy, a, s);
+                    draw_tick(bmp, &g.min_tick, cx, cy, a, w2, h2, s);
                 }
             }
         }
 
         if (b >= 0)
-            draw_tick(bmp, &g.hour_tick, cx, cy, b, s);
+            draw_tick(bmp, &g.hour_tick, cx, cy, b, w2, h2, s);
         if (c >= 0)
         {
             // workaround for missing sec_tick config
             struct tick_conf sec_tick = g.hour_tick;
             sec_tick.col = g.sec_hand.col;
-            draw_tick(bmp, &sec_tick, cx, cy, c, s);
+            draw_tick(bmp, &sec_tick, cx, cy, c, w2, h2, s);
         }
 
         if (g.dialnumbers.show)
@@ -1199,6 +1295,7 @@ static void init()
     g.dialnumbers.show = 0;
     g.fontconf.day = SMOOTH_FONT;
     g.fontconf.dial = SMOOTH_SMALL_FONT;
+    // g.rounded_rect = 0;
 
     read_settings();
 

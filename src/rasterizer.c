@@ -328,6 +328,203 @@ void draw_rect(struct GBitmap *bmp, struct scanline *scanlines,
         DRAW_RECT(y0, y1, y2, y3, blend_inv(line[x], color, a, od));
 }
 
+#define DRAW_VSTRIP_LINES(y0, y1, mask, blend) ({\
+\
+    for (int y = y0; y < y1; ++y) \
+    { \
+        int32_t fy = fixed(y) + half; \
+        int32_t fydx = (fy - py) * dx; \
+ \
+        int32_t x0 = (fydx - ws0) / dy; \
+        int32_t x1 = (fydx + ws1) / dy; \
+        int32_t x2 = (fydx + ws0) / dy; \
+ \
+        uint8_t *line = gbitmap_get_data_row_info(bmp, (unsigned)y).data; \
+        int ix0 = fixedfloor(x0 + px); \
+        int ix1 = fixedfloor(x1 + px); \
+        int ix2 = fixedfloor(x2 + px); \
+        int32_t dys = dy << FIXED_SHIFT; \
+        int32_t dxs = 0; \
+ \
+        update_scanline(scanlines + y, ix0, ix2); \
+ \
+        int32_t d0s = fydx + pxdy - (fixed(ix0) + half) * dy; \
+        int32_t d1s = (fy - py) << dshift; \
+        int x; \
+        for (x = ix0; x < ix1; ++x) \
+        { \
+            AA_STEP(mask, true, blend); \
+            else break; \
+        } \
+ \
+        for (; x < ix1; ++x) \
+            line[x] = color; \
+ \
+        d0s = fydx + pxdy - (fixed(x) + half) * dy; \
+        for (; x < ix2; ++x) \
+        { \
+            AA_STEP(mask, false, blend); \
+            else line[x] = color; \
+        } \
+    } \
+})
+
+#define DRAW_VSTRIP(blend) ({\
+    if (y1 < y2) \
+    { \
+        DRAW_VSTRIP_LINES(y0, y1, 0x1, blend); \
+        DRAW_VSTRIP_LINES(y1, y2, 0, blend); \
+        DRAW_VSTRIP_LINES(y2, y3, 0x2, blend); \
+    } \
+})
+
+void draw_vstrip(struct GBitmap *bmp, struct scanline *scanlines,
+                 uint32_t colors, int32_t px, int32_t py,
+                 int32_t dx, int32_t dy, int32_t len, int32_t w)
+{
+    uint8_t color = colors >> 24;
+
+    // length of (dx, dy) is assumed to be fixed(256)
+    const int dshift = FIXED_SHIFT + 8;
+
+    // (dx, dy) shall point downwards or right
+    if (dy < 0 || (dy == 0 && dx < 0))
+    {
+        px += (dx * len) >> dshift;
+        py += (dy * len) >> dshift;
+        dx = -dx;
+        dy = -dy;
+    }
+
+    int32_t half = (1 << (FIXED_SHIFT - 1));
+
+    int smooth = 2;
+    int32_t fs2 = fixed(smooth)/2;
+    int32_t wi = w - fs2;
+    w += fs2;
+    // distances along line where aa starts and ends
+    int32_t s0 = -fs2;
+    int32_t s1 = ((dy * len) >> dshift) + fs2;
+    // y coordinates where line starts and ends
+    int y0 = fixedfloor(py - fs2);
+    int y1 = fixedceil(py + fs2);
+    int y2 = fixedfloor(py + ((dy * len) >> dshift) - fs2);
+    int y3 = fixedceil(py + ((dy * len) >> dshift) + fs2);
+
+    int32_t ws0 = w << dshift;
+    int32_t ws1 = wi << dshift;
+    int32_t pxdy = px * dy;
+
+    DRAW_VSTRIP((uint8_t)(colors >> (8 * (a - 1))));
+}
+
+#define DRAW_HSTRIP_LINES(y0, y1, mask, blend) ({\
+\
+    for (int y = y0; y < y1; ++y) \
+    { \
+        int32_t fy = fixed(y) + half; \
+        int32_t fydx = (fy - py) * dx; \
+ \
+        int32_t x0, x1, x2; \
+        if (dy > 0) \
+        { \
+            x0 = (fydx - ws0) / dy; \
+            x1 = (fydx + ws1) / dy; \
+            x2 = (fydx + ws0) / dy; \
+ \
+            if (dx != 0 && mask) \
+            { \
+                if (e0 > x0) x0 = e0; \
+                if (e1 < x1) x1 = e1; \
+                if (e2 < x2) x2 = e2; \
+            } \
+        } \
+        else \
+        { \
+            x0 = e0; \
+            x1 = e1; \
+            x2 = e2; \
+        } \
+ \
+        uint8_t *line = gbitmap_get_data_row_info(bmp, (unsigned)y).data; \
+        int ix0 = fixedfloor(x0 + px); \
+        int ix1 = fixedfloor(x1 + px); \
+        int ix2 = fixedfloor(x2 + px); \
+        int32_t dys = dy << FIXED_SHIFT; \
+        int32_t dxs = (dx > 0 ? 1 : -1) << (FIXED_SHIFT + dshift); \
+ \
+        update_scanline(scanlines + y, ix0, ix2); \
+ \
+        int32_t d0s = fydx + pxdy - (fixed(ix0) + half) * dy; \
+        int32_t d1s = (dx > 0 ? (fixed(ix0) + half) - px : px - (fixed(ix0) + half)) << dshift; \
+        int x; \
+        for (x = ix0; x < ix1; ++x) \
+        { \
+            AA_STEP(mask, true, blend); \
+            else break; \
+        } \
+ \
+        for (; x < ix1; ++x) \
+            line[x] = color; \
+ \
+        d0s = fydx + pxdy - (fixed(x) + half) * dy; \
+        d1s = (dx > 0 ? (fixed(x) + half) - px : px - (fixed(x) + half)) << dshift; \
+        for (; x < ix2; ++x) \
+        { \
+            AA_STEP(mask, false, blend); \
+            else line[x] = color; \
+        } \
+    } \
+})
+
+#define DRAW_HSTRIP(blend) ({\
+    DRAW_HSTRIP_LINES(y0, y3, 0x3, blend); \
+})
+
+void draw_hstrip(struct GBitmap *bmp, struct scanline *scanlines,
+                 uint32_t colors, int32_t px, int32_t py,
+                 int32_t dx, int32_t dy, int32_t len, int32_t w)
+{
+    uint8_t color = colors >> 24;
+
+    // length of (dx, dy) is assumed to be fixed(256)
+    const int dshift = FIXED_SHIFT + 8;
+
+    // (dx, dy) shall point downwards or right
+    if (dy < 0 || (dy == 0 && dx < 0))
+    {
+        px += (dx * len) >> dshift;
+        py += (dy * len) >> dshift;
+        dx = -dx;
+        dy = -dy;
+    }
+
+    int32_t half = (1 << (FIXED_SHIFT - 1));
+
+    int smooth = 2;
+    int32_t fs2 = fixed(smooth)/2;
+    int32_t wi = w - fs2;
+    w += fs2;
+    int32_t s0 = -fs2;
+    int32_t s1 = (((dx > 0 ? dx : -dx) * len) >> dshift) + fs2;
+    int32_t e0 = dx > 0 ? s0 : -s1;
+    int32_t e1 = (dx > 0 ? s1 : -s0) - 2 * fs2;
+    int32_t e2 = dx > 0 ? s1 : -s0;
+
+    int32_t ws0 = w << dshift;
+    int32_t ws1 = wi << dshift;
+
+    int32_t sdy = ((dx > 0 ? ws0 : -ws0) - dy * fs2) / dx;
+    int y0 = fixedfloor(py - sdy);
+    int y1 = fixedceil(py + sdy);
+    int y2 = fixedfloor(py + ((dy * len) >> dshift) - sdy);
+    int y3 = fixedceil(py + ((dy * len) >> dshift) + sdy);
+
+    int32_t pxdy = px * dy;
+
+    DRAW_HSTRIP((uint8_t)(colors >> (8 * (a - 1))));
+}
+
 void draw_2bit_bmp(struct GBitmap *bmp, struct bmpset *set, int n,
                    int x, int y, uint32_t colors)
 {

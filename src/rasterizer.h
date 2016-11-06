@@ -68,6 +68,12 @@ void draw_rect(struct GBitmap *bmp, struct scanline *scanlines,
 void draw_bg_rect(struct GBitmap *bmp, struct scanline *scanlines,
                   uint32_t colors, int32_t px, int32_t py,
                   int32_t dx, int32_t dy, int32_t len, int32_t w);
+void draw_vstrip(struct GBitmap *bmp, struct scanline *scanlines,
+                 uint32_t colors, int32_t px, int32_t py,
+                 int32_t dx, int32_t dy, int32_t len, int32_t w);
+void draw_hstrip(struct GBitmap *bmp, struct scanline *scanlines,
+                 uint32_t colors, int32_t px, int32_t py,
+                 int32_t dx, int32_t dy, int32_t len, int32_t w);
 void draw_circle(struct GBitmap *bmp, uint8_t color, int32_t cx, int32_t cy,
                  int32_t r, bool outline, bool dark_bg);
 
