@@ -782,7 +782,8 @@ static void render(GContext *ctx, GRect bounds)
                 b = (h % 12) * TRIG_MAX_ANGLE / 12;
             }
 
-            int32_t sn = g.hour_tick.show ? s - g.hour_tick.h : s;
+            int32_t sr = (s * mr) >> FIXED_SHIFT;
+            int32_t sn = g.hour_tick.show ? sr - g.hour_tick.h : sr;
 
             if (g.dialnumbers.show & 0x2)
             {
