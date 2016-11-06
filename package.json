@@ -96,7 +96,8 @@
     },
     "targetPlatforms": [
       "basalt",
-      "chalk"
+      "chalk",
+      "emery"
     ],
     "capabilities": [
       "configurable"
