@@ -1293,7 +1293,7 @@ static void init()
     g.statusconf.warnlevel = 10;
     g.statusconf.vibepattern = 3;
     g.dialnumbers.col = 0xFF;
-    g.dialnumbers.show = 0;
+    g.dialnumbers.show = 1;
     g.fontconf.day = SMOOTH_FONT;
     g.fontconf.dial = SMOOTH_SMALL_FONT;
     // g.rounded_rect = 0;
