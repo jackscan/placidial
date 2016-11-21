@@ -86,6 +86,7 @@
         "mintickshow",
         "minticklen",
         "mintickwidth",
+        "colorflip",
         "longitude",
         "latitude"
     ],

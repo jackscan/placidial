@@ -103,6 +103,21 @@ module.exports = [{
         "label": "Outline",
         "defaultValue": true
     }, {
+        "type": "radiogroup",
+        "messageKey": "colorflip",
+        "label": "Invert Brightness",
+        "defaultValue": "0",
+        "options": [{
+            "label": "No Inversion",
+            "value": 0
+        }, {
+            "label": "Invert at Day",
+            "value": 1
+        }, {
+            "label": "Invert at Night",
+            "value": 2
+        }]
+    }, {
         "type": "color",
         "messageKey": "bgcol",
         "defaultValue": "0x000000",

@@ -42,6 +42,7 @@ enum
     MINTICK_KEY,
     LASTTICK_KEY,
     FONTS_KEY,
+    COLORFLIP_KEY,
     LONGITUDE_KEY,
     LATITUDE_KEY,
 };
@@ -72,6 +73,13 @@ enum
     BLOCKY_SMALL_FONT,
     SMOOTH_FONT,
     SMOOTH_SMALL_FONT,
+};
+
+enum
+{
+    NO_COLOR_FLIP,
+    FLIP_COLOR_DAY,
+    FLIP_COLOR_NIGHT,
 };
 
 struct
@@ -144,6 +152,7 @@ struct
     } statusconf;
 
     int sunrise, sunset;
+    uint8_t flip_colors_conf;
     bool flip_colors;
 } g;
 
@@ -508,6 +517,27 @@ static void calc_suntimes(void)
     }
 }
 
+static inline void set_color_flip(bool flip)
+{
+    if (g.flip_colors != flip)
+    {
+        g.flip_colors = flip;
+        clear_bg();
+    }
+}
+
+static inline void update_color_flip(void)
+{
+    bool isday = g.sunrise <= g.dmin && g.dmin < g.sunset;
+
+    switch (g.flip_colors_conf)
+    {
+    case FLIP_COLOR_DAY: set_color_flip(isday); break;
+    case FLIP_COLOR_NIGHT: set_color_flip(!isday); break;
+    case NO_COLOR_FLIP: set_color_flip(false); break;
+    }
+}
+
 static void update_day_night(void)
 {
     APP_LOG(APP_LOG_LEVEL_DEBUG, "day of year: %d", g.day.ofyear);
@@ -523,6 +553,7 @@ static void update_day_night(void)
         g.sunset = 18 * 60;
     }
 
+    update_color_flip();
 }
 
 static void update_time(struct tm *t)
@@ -534,6 +565,7 @@ static void update_time(struct tm *t)
     if (g.dmin != dmin)
     {
         g.dmin = dmin;
+        update_color_flip();
     }
 
     if (t->tm_wday != g.day.ofweek || t->tm_mday != g.day.ofmonth)
@@ -1124,6 +1156,11 @@ static void read_settings(void)
         APP_LOG(APP_LOG_LEVEL_DEBUG, "fonts: %d, %d",
                 (int)g.fontconf.day, (int)g.fontconf.dial);
     }
+    if (persist_exists(COLORFLIP_KEY))
+    {
+        g.flip_colors_conf = persist_read_int(COLORFLIP_KEY);
+        APP_LOG(APP_LOG_LEVEL_DEBUG, "colorflip: %i", g.flip_colors_conf);
+    }
     if (persist_exists(LONGITUDE_KEY))
     {
         g.lon = persist_read_int(LONGITUDE_KEY);
@@ -1155,6 +1192,7 @@ static void save_settings(void)
     persist_write_data(MINTICK_KEY, &g.min_tick, sizeof(g.min_tick));
     persist_write_int(LASTTICK_KEY, (int)(unsigned)g.last_tick);
     persist_write_data(FONTS_KEY, &g.fontconf, sizeof(g.fontconf));
+    persist_write_int(COLORFLIP_KEY, g.flip_colors_conf);
     persist_write_int(LONGITUDE_KEY, g.lon);
     persist_write_int(LATITUDE_KEY, g.lat);
 }
@@ -1329,6 +1367,9 @@ static void message_received(DictionaryIterator *iter, void *context)
     }
     CONFIG_SET_COLOR(g.dialnumbers.col, dialnumcol);
 
+    if (CONFIG_SET_UINT(g.flip_colors_conf, colorflip, 2))
+        update_day_night();
+
     bool fontsupdate = false;
 
     uint32_t dayfont = 0;
@@ -1456,6 +1497,7 @@ static void init()
     g.dialnumbers.show = 1;
     g.fontconf.day = SMOOTH_FONT;
     g.fontconf.dial = SMOOTH_SMALL_FONT;
+    g.flip_colors_conf = NO_COLOR_FLIP;
     g.flip_colors = false;
     // g.rounded_rect = 0;
 
