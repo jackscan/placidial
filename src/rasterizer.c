@@ -84,6 +84,13 @@ static inline void color_min_max(uint8_t col, uint8_t *min, uint8_t *max)
     }
 }
 
+bool dark_color(uint8_t color)
+{
+    uint8_t min, max;
+    color_min_max(color, &min, &max);
+    return min + max <= 3;
+}
+
 static inline uint8_t gray(uint8_t luminance)
 {
     return (luminance << 4) | (luminance << 2) | luminance;
