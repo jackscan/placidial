@@ -4,3 +4,40 @@ var Clay = require('pebble-clay');
 var clayConfig = require('./config');
 // Initialize Clay
 var clay = new Clay(clayConfig);
+
+var locationOptions = {
+  enableHighAccuracy: false,
+  maximumAge: 21600000, // 6h
+  timeout: 60000, // 1min
+};
+
+function locationSuccess(pos) {
+  console.log('lat= ' + pos.coords.latitude + ' lon= ' + pos.coords.longitude);
+
+  const TRIG_MAX_ANGLE = 0x10000;
+
+  var loc = {
+      'longitude': Math.round(pos.coords.longitude * TRIG_MAX_ANGLE / 360),
+      'latitude': Math.round(pos.coords.latitude * TRIG_MAX_ANGLE / 360),
+  }
+
+  Pebble.sendAppMessage(loc,
+    function(e) {
+      console.log('Send successful.');
+    },
+    function(e) {
+      console.log('Send failed!');
+    }
+  );
+}
+
+function locationError(err) {
+  console.log('location error (' + err.code + '): ' + err.message);
+}
+
+Pebble.addEventListener('ready',
+  function(e) {
+    // Request current position
+    navigator.geolocation.getCurrentPosition(locationSuccess, locationError, locationOptions);
+  }
+);

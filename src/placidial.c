@@ -41,10 +41,14 @@ enum
     HOURBELOW_KEY,
     MINTICK_KEY,
     LASTTICK_KEY,
-    FONTS_KEY
+    FONTS_KEY,
+    LONGITUDE_KEY,
+    LATITUDE_KEY,
 };
 
-#define NUM_MESSAGE_KEYS    42
+#define INVALID_DEGREE (TRIG_MAX_ANGLE * 2)
+
+#define NUM_MESSAGE_KEYS    46
 
 #define DEMO 0
 #define BENCH 0
@@ -75,6 +79,7 @@ struct
     Window *window;
     uint8_t bgcol;
     int hour, min, sec;
+    int lon, lat;
 
     int showsec;
     int seccount;
@@ -1018,6 +1023,16 @@ static void read_settings(void)
         APP_LOG(APP_LOG_LEVEL_DEBUG, "fonts: %d, %d",
                 (int)g.fontconf.day, (int)g.fontconf.dial);
     }
+    if (persist_exists(LONGITUDE_KEY))
+    {
+        g.lon = persist_read_int(LONGITUDE_KEY);
+        APP_LOG(APP_LOG_LEVEL_DEBUG, "lon: %i", g.lon);
+    }
+    if (persist_exists(LATITUDE_KEY))
+    {
+        g.lat = persist_read_int(LATITUDE_KEY);
+        APP_LOG(APP_LOG_LEVEL_DEBUG, "lat: %i", g.lat);
+    }
 }
 
 static void save_settings(void)
@@ -1039,12 +1054,24 @@ static void save_settings(void)
     persist_write_data(MINTICK_KEY, &g.min_tick, sizeof(g.min_tick));
     persist_write_int(LASTTICK_KEY, (int)(unsigned)g.last_tick);
     persist_write_data(FONTS_KEY, &g.fontconf, sizeof(g.fontconf));
+    persist_write_int(LONGITUDE_KEY, g.lon);
+    persist_write_int(LATITUDE_KEY, g.lat);
 }
 
 static inline uint32_t clamp(uint32_t val, uint32_t max)
 {
     return val < max ? val : max;
 }
+
+#define CONFIG_SET_INT(C, K) ({\
+    if ((t = dict_find(iter, MESSAGE_KEY_##K))) { \
+        C = t->value->int32; \
+        if (t->type == TUPLE_CSTRING) \
+            C = atoi(t->value->cstring); \
+        APP_LOG(APP_LOG_LEVEL_DEBUG, #K ": %d", C); \
+    } \
+    t != NULL; \
+})
 
 #define CONFIG_SET_UINT(C, K, M) ({\
     if ((t = dict_find(iter, MESSAGE_KEY_##K))) { \
@@ -1092,6 +1119,13 @@ static inline uint32_t clamp(uint32_t val, uint32_t max)
 static void message_received(DictionaryIterator *iter, void *context)
 {
     Tuple *t;
+
+    bool pos_update = false;
+    if (CONFIG_SET_INT(g.lon, longitude))
+        pos_update = true;
+
+    if (CONFIG_SET_INT(g.lat, latitude))
+        pos_update = true;
 
     uint32_t secshow = 0;
     uint32_t sectimeout = 0;
@@ -1319,6 +1353,9 @@ static void init()
     g.fontconf.day = SMOOTH_FONT;
     g.fontconf.dial = SMOOTH_SMALL_FONT;
     // g.rounded_rect = 0;
+
+    g.lon = INVALID_DEGREE;
+    g.lat = INVALID_DEGREE;
 
     read_settings();
 

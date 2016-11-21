@@ -85,7 +85,9 @@
         "hourtickwidth",
         "mintickshow",
         "minticklen",
-        "mintickwidth"
+        "mintickwidth",
+        "longitude",
+        "latitude"
     ],
     "enableMultiJS": true,
     "displayName": "Placid Dial",
@@ -100,7 +102,8 @@
       "emery"
     ],
     "capabilities": [
-      "configurable"
+      "configurable",
+      "location"
     ]
   },
   "name": "Placidial"
