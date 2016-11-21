@@ -164,6 +164,12 @@ static inline uint32_t get_colors(uint8_t bg, uint8_t col)
         | (c << 24);
 }
 
+static inline void clear_bg(void)
+{
+    free(g.scanlines);
+    g.scanlines = NULL;
+}
+
 static void draw_week(GBitmap *bmp, int x, int y)
 {
     const int w = 4;
@@ -1117,8 +1123,7 @@ static void message_received(DictionaryIterator *iter, void *context)
 
     if (CONFIG_SET_COLOR(g.bgcol, bgcol))
     {
-        free(g.scanlines);
-        g.scanlines = NULL;
+        clear_bg();
     }
 
     CONFIG_SET_TOGGLE(g.hourhand_below, hourbelowmin);
@@ -1226,7 +1231,7 @@ static void window_load(Window *window)
 #if DEMO || BENCH
     tick_timer_service_subscribe(SECOND_UNIT, tick_handler);
 #endif
-    g.scanlines = NULL;
+    clear_bg();
     g.status.batstate = battery_state_service_peek();
 
     g.status.connected = connection_service_peek_pebble_app_connection();
@@ -1242,8 +1247,7 @@ static void window_unload(Window *window)
     connection_service_unsubscribe();
     tick_timer_service_unsubscribe();
     accel_tap_service_unsubscribe();
-    free(g.scanlines);
-    g.scanlines = NULL;
+    clear_bg();
 }
 
 static void init()
