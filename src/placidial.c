@@ -140,14 +140,24 @@ struct
         uint8_t vibepattern;
         bool showconn;
     } statusconf;
+
+    bool flip_colors;
 } g;
+
+static uint8_t process_color(uint8_t col)
+{
+    if (g.flip_colors)
+        return flip_color(col);
+    else
+        return col;
+}
 
 static inline uint32_t get_aa_colors(uint8_t bg, uint8_t col)
 {
     int od = g.outline ? 3 : 4;
-    uint32_t b = bg;
-    uint32_t c = col;
-    if (! dark_color(bg))
+    uint32_t b = process_color(bg);
+    uint32_t c = process_color(col);
+    if (! dark_color(b))
         return (uint32_t)blend_inv(b, c, 1, od)
             | (((uint32_t)blend_inv(b, c, 2, od)) << 8)
             | (((uint32_t)blend_inv(b, c, 3, od)) << 16)
@@ -161,8 +171,8 @@ static inline uint32_t get_aa_colors(uint8_t bg, uint8_t col)
 
 static inline uint32_t get_colors(uint8_t bg, uint8_t col)
 {
-    uint32_t b = bg;
-    uint32_t c = col;
+    uint32_t b = process_color(bg);
+    uint32_t c = process_color(col);
     return b
         | (((uint32_t)blend(b, c, 2, 5)) << 8)
         | (((uint32_t)blend(b, c, 3, 5)) << 16)
@@ -183,16 +193,17 @@ static void draw_week(GBitmap *bmp, int x, int y)
 
     for (int i = 0; i < 4; ++i)
     {
-        uint8_t color = i == g.day.ofweek
-                            ? g.daycolors.today
-                            : i == 0 ? g.daycolors.sunday : g.daycolors.weekday;
+        uint8_t color =
+            process_color(i == g.day.ofweek ? g.daycolors.today
+                                            : i == 0 ? g.daycolors.sunday
+                                                     : g.daycolors.weekday);
         draw_box(bmp, color, x + i * dx, y, w, w);
     }
 
     for (int i = 1; i < 4; ++i)
     {
-        uint8_t color =
-            i + 3 == g.day.ofweek ? g.daycolors.today : g.daycolors.weekday;
+        uint8_t color = process_color(
+            i + 3 == g.day.ofweek ? g.daycolors.today : g.daycolors.weekday);
         draw_box(bmp, color, x + i * dx, y + dy, w, w);
     }
 }
@@ -237,8 +248,8 @@ static struct rect get_day_rect(int px, int py)
 static void clear_day(GBitmap *bmp, int px, int py)
 {
     struct rect r = get_day_rect(px, py);
-    uint32_t col4 =
-        (g.bgcol << 24) | (g.bgcol << 16) | (g.bgcol << 8) | g.bgcol;
+    uint32_t col = process_color(g.bgcol);
+    uint32_t col4 = (col << 24) | (col << 16) | (col << 8) | col;
 
     for (int y = r.y0; y < r.y1; ++y)
     {
@@ -494,7 +505,8 @@ static void draw_status(GBitmap *bmp, int cx, int cy, int r,
 
     if (show_disconnected())
     {
-        draw_disconnected(bmp, g.scanlines, g.statusconf.color, px, py);
+        draw_disconnected(bmp, g.scanlines,
+                          process_color(g.statusconf.color), px, py);
         blocked[s] = 2;
         for (i = 0; i < 4; ++i)
             if (blocked[(first + i) % 4] < 2)
@@ -505,8 +517,8 @@ static void draw_status(GBitmap *bmp, int cx, int cy, int r,
     }
 
     if (show_battery())
-        draw_battery(bmp, g.scanlines, g.statusconf.color, px, py,
-                     g.status.batstate.charge_percent);
+        draw_battery(bmp, g.scanlines, process_color(g.statusconf.color),
+                     px, py, g.status.batstate.charge_percent);
 }
 
 static void draw_hand(struct GBitmap *bmp,struct hand_conf *conf, int32_t mr,
@@ -522,8 +534,9 @@ static void draw_hand(struct GBitmap *bmp,struct hand_conf *conf, int32_t mr,
                      conf->w / 2);
     }
     else
-        draw_rect(bmp, g.scanlines, conf->col, px, py, dx, dy, len, conf->w / 2,
-                  g.outline, dark_color(g.bgcol));
+        draw_rect(bmp, g.scanlines, process_color(conf->col), px, py, dx, dy,
+                  len, conf->w / 2, g.outline,
+                  dark_color(process_color(g.bgcol)));
 }
 
 static bool show_seconds(void)
@@ -555,6 +568,8 @@ static void render(GContext *ctx, GRect bounds)
     // max radius
     int32_t mr = fixed(w2 < h2 ? w2 : h2);
 
+    uint8_t bg = process_color(g.bgcol);
+
     // first clear
     if (g.scanlines == NULL || g.num_scanlines < bounds.size.h)
     {
@@ -567,7 +582,7 @@ static void render(GContext *ctx, GRect bounds)
         for (int y = 0; y < bounds.size.h; ++y)
         {
             GBitmapDataRowInfo row = gbitmap_get_data_row_info(bmp, y);
-            memset(row.data + row.min_x, g.bgcol, row.max_x - row.min_x + 1);
+            memset(row.data + row.min_x, bg, row.max_x - row.min_x + 1);
             struct scanline *sl = g.scanlines + y;
             sl->start = bounds.size.w;
             sl->end = 0;
@@ -591,8 +606,7 @@ static void render(GContext *ctx, GRect bounds)
         }
 
         // clear scanlines
-        uint32_t col4 =
-            (g.bgcol << 24) | (g.bgcol << 16) | (g.bgcol << 8) | g.bgcol;
+        uint32_t col4 = (bg << 24) | (bg << 16) | (bg << 8) | bg;
         for (int y = 0; y < g.num_scanlines; ++y)
         {
             struct scanline *sl = g.scanlines + y;
@@ -776,7 +790,7 @@ static void render(GContext *ctx, GRect bounds)
         {
             // workaround for missing sec_tick config
             struct tick_conf sec_tick = g.hour_tick;
-            sec_tick.col = g.sec_hand.col;
+            sec_tick.col = process_color(g.sec_hand.col);
             draw_tick(bmp, &sec_tick, cx, cy, c, w2, h2, s);
         }
 
@@ -821,14 +835,14 @@ static void render(GContext *ctx, GRect bounds)
         draw_hand(bmp, &g.hour_hand, mr, cx, cy, hour.dx, hour.dy, false);
     }
 
-    draw_circle(bmp, g.center[0].col, cx, cy, g.center[0].r, g.outline,
-                dark_color(g.bgcol));
+    draw_circle(bmp, process_color(g.center[0].col), cx, cy, g.center[0].r,
+                g.outline, dark_color(bg));
 
     if (show_seconds())
     {
         draw_hand(bmp, &g.sec_hand, mr, cx, cy, sec.dx, sec.dy, false);
-        draw_circle(bmp, g.center[1].col, cx, cy, g.center[1].r, g.outline,
-                    dark_color(g.bgcol));
+        draw_circle(bmp, process_color(g.center[1].col), cx, cy, g.center[1].r,
+                    g.outline, dark_color(bg));
     }
 
 
@@ -1352,6 +1366,7 @@ static void init()
     g.dialnumbers.show = 1;
     g.fontconf.day = SMOOTH_FONT;
     g.fontconf.dial = SMOOTH_SMALL_FONT;
+    g.flip_colors = false;
     // g.rounded_rect = 0;
 
     g.lon = INVALID_DEGREE;
