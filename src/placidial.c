@@ -1095,26 +1095,27 @@ static void message_received(DictionaryIterator *iter, void *context)
 
     uint32_t secshow = 0;
     uint32_t sectimeout = 0;
-    CONFIG_SET_UINT(secshow, showsec, 2);
-    CONFIG_SET_UINT(sectimeout, sectimeout, 120);
+    if (CONFIG_SET_UINT(secshow, showsec, 2) &&
+        CONFIG_SET_UINT(sectimeout, sectimeout, 120))
+    {
+        switch (secshow) {
+        default:
+        case 0: g.showsec = 0; break;
+        case 1: g.showsec = -1; break;
+        case 2: g.showsec = sectimeout; break;
+        }
+        APP_LOG(APP_LOG_LEVEL_DEBUG, "showsec: %d", (int)g.showsec);
 
-    switch (secshow) {
-    default:
-    case 0: g.showsec = 0; break;
-    case 1: g.showsec = -1; break;
-    case 2: g.showsec = sectimeout; break;
+        g.seccount = 0;
+        if (g.showsec > 0) accel_tap_service_subscribe(tap_handler);
+        else accel_tap_service_unsubscribe();
+
+        tick_timer_service_subscribe(show_seconds() ? SECOND_UNIT : MINUTE_UNIT,
+                                     tick_handler);
+     #if DEMO || BENCH
+        tick_timer_service_subscribe(SECOND_UNIT, tick_handler);
+     #endif
     }
-    APP_LOG(APP_LOG_LEVEL_DEBUG, "showsec: %d", (int)g.showsec);
-
-    g.seccount = 0;
-    if (g.showsec > 0) accel_tap_service_subscribe(tap_handler);
-    else accel_tap_service_unsubscribe();
-
-    tick_timer_service_subscribe(show_seconds() ? SECOND_UNIT : MINUTE_UNIT,
-                                 tick_handler);
- #if DEMO || BENCH
-    tick_timer_service_subscribe(SECOND_UNIT, tick_handler);
- #endif
 
     if (CONFIG_SET_TOGGLE(g.day.show, dayshow))
         g.day.update = true;
@@ -1148,23 +1149,29 @@ static void message_received(DictionaryIterator *iter, void *context)
     CONFIG_SET_WIDTH(g.center[1].r, seccenterwidth, 32, 1);
     CONFIG_SET_COLOR(g.center[1].col, seccentercol);
 
-    uint32_t hourtick = 0;
-    CONFIG_SET_UINT(hourtick, hourtickshow, 2);
-    APP_LOG(APP_LOG_LEVEL_DEBUG, "hourtick: 0x%x", (int)hourtick);
+    uint32_t hourtick = 0xFFFFFFFF;
+    if (CONFIG_SET_UINT(hourtick, hourtickshow, 2))
+    {
+        APP_LOG(APP_LOG_LEVEL_DEBUG, "hourtick: 0x%x", (int)hourtick);
+        g.hour_tick.show = hourtick != 0;
+    }
     CONFIG_SET_COLOR(g.hour_tick.col, hourtickcol);
     CONFIG_SET_WIDTH(g.hour_tick.w, hourtickwidth, 16, 0);
     CONFIG_SET_WIDTH(g.hour_tick.h, hourticklen, 32, 0);
-    g.hour_tick.show = hourtick != 0;
 
-    uint32_t mintick = 0;
-    CONFIG_SET_UINT(mintick, mintickshow, 2);
+    uint32_t mintick = 0xFFFFFFFF;
+    if (CONFIG_SET_UINT(mintick, mintickshow, 2))
+        g.min_tick.show = mintick != 0;
+
     CONFIG_SET_COLOR(g.min_tick.col, mintickcol);
     CONFIG_SET_WIDTH(g.min_tick.w, mintickwidth, 16, 0);
     CONFIG_SET_WIDTH(g.min_tick.h, minticklen, 32, 0);
-    g.min_tick.show = mintick != 0;
 
-    g.last_tick = (hourtick & 1) | ((mintick & 1) << 1);
-    APP_LOG(APP_LOG_LEVEL_DEBUG, "lasttick: 0x%x", (int)g.last_tick);
+    if (mintick != 0xFFFFFFFF && hourtick != 0xFFFFFFFF)
+    {
+        g.last_tick = (hourtick & 1) | ((mintick & 1) << 1);
+        APP_LOG(APP_LOG_LEVEL_DEBUG, "lasttick: 0x%x", (int)g.last_tick);
+    }
 
     CONFIG_SET_COLOR(g.daycolors.dayofmonth, daycol);
     CONFIG_SET_COLOR(g.daycolors.weekday, weekcol);
@@ -1177,20 +1184,31 @@ static void message_received(DictionaryIterator *iter, void *context)
     CONFIG_SET_UINT(g.statusconf.warnlevel, batwarn, 100);
 
     bool showhournum = false, showminnum = false;
-    CONFIG_SET_TOGGLE(showhournum, hournumshow);
-    CONFIG_SET_TOGGLE(showminnum, minnumshow);
+    if (CONFIG_SET_TOGGLE(showhournum, hournumshow) &&
+        CONFIG_SET_TOGGLE(showminnum, minnumshow))
+    {
+        g.dialnumbers.show = (int)showhournum | ((int)showminnum << 1);
+    }
     CONFIG_SET_COLOR(g.dialnumbers.col, dialnumcol);
-    g.dialnumbers.show = (int)showhournum | ((int)showminnum << 1);
+
+    bool fontsupdate = false;
 
     uint32_t dayfont = 0;
-    CONFIG_SET_UINT(dayfont, dayfont, 1);
-    g.fontconf.day = dayfont * 2;
+    if (CONFIG_SET_UINT(dayfont, dayfont, 1))
+    {
+        g.fontconf.day = dayfont * 2;
+        fontsupdate = true;
+    }
 
     uint32_t dialfont = 0;
-    CONFIG_SET_UINT(dialfont, dialfont, 1);
-    g.fontconf.dial = dialfont * 2 + 1;
+    if (CONFIG_SET_UINT(dialfont, dialfont, 1))
+    {
+        g.fontconf.dial = dialfont * 2 + 1;
+        fontsupdate = true;
+    }
 
-    load_fonts();
+    if (fontsupdate)
+        load_fonts();
 
     save_settings();
 
