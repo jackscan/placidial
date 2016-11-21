@@ -71,6 +71,34 @@ int32_t sqrti(int32_t i)
     return r;
 }
 
+static inline void color_min_max(uint8_t col, uint8_t *min, uint8_t *max)
+{
+    *min = col & 0x3;
+    *max = col & 0x3;
+
+    for (int i = 1; i <= 2; ++i)
+    {
+        uint8_t c = (col >> (i * 2)) & 0x3;
+        if (c < *min) *min = c;
+        if (c > *max) *max = c;
+    }
+}
+
+static inline uint8_t gray(uint8_t luminance)
+{
+    return (luminance << 4) | (luminance << 2) | luminance;
+}
+
+uint8_t flip_color(uint8_t col)
+{
+    uint8_t min, max;
+    color_min_max(col, &min, &max);
+    if (min + max > 3) col -= gray(min);
+    if (min + max < 3) col += gray(3 - max);
+
+    return col;
+}
+
 void draw_box(struct GBitmap *bmp, uint8_t color, int x, int y, int w, int h)
 {
     for (int i = 0; i < h; ++i)

@@ -93,6 +93,7 @@ static inline bool dark_color(uint8_t color)
 {
     return (color & 0x2A) == 0;
 }
+uint8_t flip_color(uint8_t col);
 
 static inline uint8_t blend_inv(uint32_t x, uint32_t y, int a, int d)
 {
