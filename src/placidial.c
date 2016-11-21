@@ -79,6 +79,8 @@ struct
     Window *window;
     uint8_t bgcol;
     int hour, min, sec;
+    int dmin;
+    int gmtoff;
     int lon, lat;
 
     int showsec;
@@ -97,7 +99,7 @@ struct
 
     struct {
         struct bmpset font;
-        int ofweek, ofmonth;
+        int ofweek, ofmonth, ofyear;
         int px, py;
         bool update;
         bool show;
@@ -141,6 +143,7 @@ struct
         bool showconn;
     } statusconf;
 
+    int sunrise, sunset;
     bool flip_colors;
 } g;
 
@@ -454,17 +457,101 @@ static void draw_dial_number(GBitmap *bmp, int n, bool pad,
     draw_dial_digits(bmp, nx, ny, n, pad);
 }
 
+static void calc_suntimes(void)
+{
+    int ad = (90284 * g.day.ofyear - 7140195 + 256) >> 9;
+    int decl = (17086 * sin_lookup(ad) + 131072) >> 18;
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "sundecl %d", decl * 36000 / TRIG_MAX_ANGLE);
+
+    // shift by one to avoid overflow
+    int sindecl2 = (sin_lookup(decl) + 1) >> 1;
+    int cosdecl2 = (cos_lookup(decl) + 1) >> 1;
+    int sinlat = sin_lookup(g.lat);
+    int coslat = cos_lookup(g.lat);
+
+    int r = (coslat * cosdecl2 + TRIG_MAX_RATIO / 2) / TRIG_MAX_RATIO;
+    int x = (-31231829 - sinlat * sindecl2 + r / 2) / r;
+
+    if (x < -TRIG_MAX_RATIO)
+    {
+        APP_LOG(APP_LOG_LEVEL_DEBUG, "no sunset");
+        g.sunrise = 0;
+        g.sunset = 1440;
+
+    }
+    else if (x > TRIG_MAX_RATIO)
+    {
+        APP_LOG(APP_LOG_LEVEL_DEBUG, "no sunrise");
+        g.sunrise = 1440;
+        g.sunset = 1440;
+    }
+    else
+    {
+        int d = atan2_lookup(sqrti((TRIG_MAX_RATIO - x) * 0x1000),
+                             sqrti((TRIG_MAX_RATIO + x) * 0x1000)) * 48;
+        int a = (-11198 * sin_lookup(352 * g.day.ofyear + 5206) -
+                   8513 * sin_lookup(186 * g.day.ofyear - 1565) + 32768) >> 16;
+
+        APP_LOG(APP_LOG_LEVEL_DEBUG, "suntime %d", d * 120 / TRIG_MAX_ANGLE);
+        APP_LOG(APP_LOG_LEVEL_DEBUG, "adjust %d", a * 60 / TRIG_MAX_RATIO);
+
+        int offset =
+            (g.gmtoff * TRIG_MAX_ANGLE - 1440 * g.lon) / TRIG_MAX_ANGLE;
+        g.sunrise = 720 - (a + d) * 60 / TRIG_MAX_RATIO + offset;
+        g.sunset = 720 - (a - d) * 60 / TRIG_MAX_RATIO + offset;
+
+        APP_LOG(APP_LOG_LEVEL_DEBUG, "sunrise at %02d:%02d",
+                g.sunrise / 60, g.sunrise % 60);
+
+        APP_LOG(APP_LOG_LEVEL_DEBUG, "sunset at %02d:%02d",
+                g.sunset / 60, g.sunset % 60);
+    }
+}
+
+static void update_day_night(void)
+{
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "day of year: %d", g.day.ofyear);
+
+    if (g.lon != INVALID_DEGREE && g.lat != INVALID_DEGREE)
+    {
+        calc_suntimes();
+    }
+    else
+    {
+        APP_LOG(APP_LOG_LEVEL_DEBUG, "no geoposition");
+        g.sunrise = 6 * 60;
+        g.sunset = 18 * 60;
+    }
+
+}
+
 static void update_time(struct tm *t)
 {
     g.hour = t->tm_hour;
     g.min = t->tm_min;
     g.sec = t->tm_sec;
+    int dmin = t->tm_hour * 60 + t->tm_min;
+    if (g.dmin != dmin)
+    {
+        g.dmin = dmin;
+    }
+
     if (t->tm_wday != g.day.ofweek || t->tm_mday != g.day.ofmonth)
     {
         g.day.ofweek = t->tm_wday;
         g.day.ofmonth = t->tm_mday;
         g.day.update = true;
     }
+
+    int off = t->tm_gmtoff / 60;
+
+    if (g.gmtoff != off || t->tm_yday != g.day.ofyear)
+    {
+        g.day.ofyear = t->tm_yday;
+        g.gmtoff = off;
+        update_day_night();
+    }
+
 #if DEMO
     g.hour = g.min % 24;
     g.min = g.sec;
@@ -1140,6 +1227,9 @@ static void message_received(DictionaryIterator *iter, void *context)
 
     if (CONFIG_SET_INT(g.lat, latitude))
         pos_update = true;
+
+    if (pos_update)
+        update_day_night();
 
     uint32_t secshow = 0;
     uint32_t sectimeout = 0;
