@@ -88,7 +88,9 @@
         "mintickwidth",
         "colorflip",
         "longitude",
-        "latitude"
+        "latitude",
+        "ready",
+        "request"
     ],
     "enableMultiJS": true,
     "displayName": "Placid Dial",

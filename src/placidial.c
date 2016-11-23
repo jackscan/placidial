@@ -47,6 +47,11 @@ enum
     LATITUDE_KEY,
 };
 
+enum
+{
+    REQUEST_LOCATION,
+};
+
 #define INVALID_DEGREE (TRIG_MAX_ANGLE * 2)
 
 #define NUM_MESSAGE_KEYS    46
@@ -85,6 +90,9 @@ enum
 struct
 {
     Window *window;
+
+    int ready;
+
     uint8_t bgcol;
     int hour, min, sec;
     int dmin;
@@ -195,6 +203,31 @@ static inline void clear_bg(void)
 {
     free(g.scanlines);
     g.scanlines = NULL;
+}
+
+static void send_request(int request)
+{
+    DictionaryIterator *iter;
+    AppMessageResult result = app_message_outbox_begin(&iter);
+    if (result != APP_MSG_OK) {
+        APP_LOG(APP_LOG_LEVEL_ERROR, "failed to create request message");
+        return;
+    }
+    dict_write_int32(iter, MESSAGE_KEY_request, request);
+    if (dict_write_end(iter) == 0)
+        APP_LOG(APP_LOG_LEVEL_ERROR, "failed to build request message");
+
+    result = app_message_outbox_send();
+    if (result != APP_MSG_OK) {
+        APP_LOG(APP_LOG_LEVEL_ERROR, "failed to send request");
+        return;
+    }
+}
+
+static void check_location_request(void)
+{
+    if (g.flip_colors_conf && g.ready)
+        send_request(REQUEST_LOCATION);
 }
 
 static void draw_week(GBitmap *bmp, int x, int y)
@@ -558,7 +591,14 @@ static void update_day_night(void)
 
 static void update_time(struct tm *t)
 {
-    g.hour = t->tm_hour;
+    bool check_location = false;
+
+    if (g.hour != t->tm_hour)
+    {
+        g.hour = t->tm_hour;
+        check_location = true;
+    }
+
     g.min = t->tm_min;
     g.sec = t->tm_sec;
     int dmin = t->tm_hour * 60 + t->tm_min;
@@ -582,7 +622,11 @@ static void update_time(struct tm *t)
         g.day.ofyear = t->tm_yday;
         g.gmtoff = off;
         update_day_night();
+        check_location = true;
     }
+
+    if (check_location)
+        check_location_request();
 
 #if DEMO
     g.hour = g.min % 24;
@@ -1259,6 +1303,12 @@ static void message_received(DictionaryIterator *iter, void *context)
 {
     Tuple *t;
 
+    if (CONFIG_SET_INT(g.ready, ready))
+    {
+        check_location_request();
+        return;
+    }
+
     bool pos_update = false;
     if (CONFIG_SET_INT(g.lon, longitude))
         pos_update = true;
@@ -1267,7 +1317,10 @@ static void message_received(DictionaryIterator *iter, void *context)
         pos_update = true;
 
     if (pos_update)
+    {
         update_day_night();
+        return;
+    }
 
     uint32_t secshow = 0;
     uint32_t sectimeout = 0;
@@ -1368,7 +1421,10 @@ static void message_received(DictionaryIterator *iter, void *context)
     CONFIG_SET_COLOR(g.dialnumbers.col, dialnumcol);
 
     if (CONFIG_SET_UINT(g.flip_colors_conf, colorflip, 2))
+    {
         update_day_night();
+        check_location_request();
+    }
 
     bool fontsupdate = false;
 
@@ -1452,7 +1508,8 @@ static void init()
     app_message_register_inbox_received(message_received);
     // needed inbox size, see note at dict_calc_buffer_size
     uint32_t insize = NUM_MESSAGE_KEYS * (7 + sizeof(int32_t)) + 1;
-    app_message_open(insize, 0);
+    uint32_t outsize = 1 * (7 + sizeof(int32_t)) + 1;
+    app_message_open(insize, outsize);
 
     g.bgcol = 0xC0;
     g.outline = true;

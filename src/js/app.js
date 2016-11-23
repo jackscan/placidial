@@ -37,7 +37,28 @@ function locationError(err) {
 
 Pebble.addEventListener('ready',
   function(e) {
-    // Request current position
-    navigator.geolocation.getCurrentPosition(locationSuccess, locationError, locationOptions);
+    Pebble.sendAppMessage({'ready': 1},
+      function(e) {
+        console.log('Send ready.');
+      },
+      function(e) {
+        console.log('Send failed!');
+      }
+    );
   }
+);
+
+Pebble.addEventListener('appmessage',
+    function(e) {
+      console.log("appmsg: " + JSON.stringify(e.payload));
+      var r = e.payload['request'];
+      if (r != null) {
+        switch (r) {
+        case 0:
+          // Request current position
+          navigator.geolocation.getCurrentPosition(locationSuccess, locationError, locationOptions);
+          break;
+        }
+      }
+    }
 );
