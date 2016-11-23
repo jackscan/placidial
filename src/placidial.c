@@ -1237,6 +1237,10 @@ static void save_settings(void)
     persist_write_int(LASTTICK_KEY, (int)(unsigned)g.last_tick);
     persist_write_data(FONTS_KEY, &g.fontconf, sizeof(g.fontconf));
     persist_write_int(COLORFLIP_KEY, g.flip_colors_conf);
+}
+
+static void save_location(void)
+{
     persist_write_int(LONGITUDE_KEY, g.lon);
     persist_write_int(LATITUDE_KEY, g.lat);
 }
@@ -1319,6 +1323,7 @@ static void message_received(DictionaryIterator *iter, void *context)
     if (pos_update)
     {
         update_day_night();
+        save_location();
         return;
     }
 
