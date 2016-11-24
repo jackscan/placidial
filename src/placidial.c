@@ -1462,7 +1462,8 @@ static void connection_handler(bool connected)
     if (connected != g.status.connected)
     {
         g.status.connected = connected;
-        if (! connected && g.statusconf.vibepattern)
+        if (! connected && g.statusconf.vibepattern &&
+            ! quiet_time_is_active())
         {
             switch (g.statusconf.vibepattern)
             {
