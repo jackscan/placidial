@@ -71,39 +71,51 @@ int32_t sqrti(int32_t i)
     return r;
 }
 
-static inline void color_min_max(uint8_t col, uint8_t *min, uint8_t *max)
+bool dark_color(uint8_t color)
 {
-    *min = col & 0x3;
-    *max = col & 0x3;
+    uint8_t r = (color >> 4) & 0x3;
+    uint8_t g = (color >> 2) & 0x3;
+    uint8_t b = color & 0x3;
+    uint8_t l = r * 3 + g * 6 + b * 2;
+    return l <= 16;
+}
+
+static inline uint8_t color_max(uint8_t col)
+{
+    uint8_t max = col & 0x3;
 
     for (int i = 1; i <= 2; ++i)
     {
         uint8_t c = (col >> (i * 2)) & 0x3;
-        if (c < *min) *min = c;
-        if (c > *max) *max = c;
+        if (c > max) max = c;
     }
-}
-
-bool dark_color(uint8_t color)
-{
-    uint8_t min, max;
-    color_min_max(color, &min, &max);
-    return min + max <= 3;
-}
-
-static inline uint8_t gray(uint8_t luminance)
-{
-    return (luminance << 4) | (luminance << 2) | luminance;
+    return max;
 }
 
 uint8_t flip_color(uint8_t col)
 {
-    uint8_t min, max;
-    color_min_max(col, &min, &max);
-    if (min + max > 3) col -= gray(min);
-    if (min + max < 3) col += gray(3 - max);
+    uint8_t r = (col >> 4) & 0x3;
+    uint8_t g = (col >> 2) & 0x3;
+    uint8_t b = col & 0x3;
+    uint8_t l = r * 3 + g * 6 + b * 2;
 
-    return col;
+    if (l > 16)
+    {
+        r = (r * (66 - l * 2) + 33) / 66;
+        b = (b * (66 - l * 2) + 33) / 66;
+        g = (g * (66 - l * 2) + 33) / 66;
+    }
+    else
+    {
+        uint8_t d = 3 - color_max(col);
+        uint8_t ld = (33 - 2 * l + 5) / 11;
+        if (d > ld) d = ld;
+        r += d;
+        b += d;
+        g += d;
+    }
+
+    return (col & 0xC0) | (r << 4) | (g << 2) | b;
 }
 
 void draw_box(struct GBitmap *bmp, uint8_t color, int x, int y, int w, int h)
