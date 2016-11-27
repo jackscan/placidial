@@ -3,7 +3,7 @@
   "author": "JacksCan",
   "private": true,
   "dependencies": {
-    "pebble-clay": "^1.0.3"
+    "pebble-clay": "^1.0.4"
   },
   "keywords": [
     "pebble-app"
