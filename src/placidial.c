@@ -750,6 +750,8 @@ static void render(GContext *ctx, GRect bounds)
             sl->start = bounds.size.w;
             sl->end = 0;
         }
+
+        g.day.update = true;
     }
     else
     {
