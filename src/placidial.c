@@ -1313,18 +1313,31 @@ static void message_received(DictionaryIterator *iter, void *context)
         return;
     }
 
-    bool pos_update = false;
-    if (CONFIG_SET_INT(g.lon, longitude))
-        pos_update = true;
-
-    if (CONFIG_SET_INT(g.lat, latitude))
-        pos_update = true;
-
-    if (pos_update)
+    // check location update
     {
-        update_day_night();
-        save_location();
-        return;
+        bool pos_update = false;
+        // 0.5 degree
+        int tolerance = TRIG_MAX_ANGLE / 720;
+        int32_t lon = g.lon;
+        int32_t lat = g.lat;
+        if (CONFIG_SET_INT(lon, longitude))
+            pos_update = true;
+
+        if (CONFIG_SET_INT(lat, latitude))
+            pos_update = true;
+
+        if (pos_update &&
+            (absi(g.lon - lon) > tolerance || absi(g.lat - lat) > tolerance))
+        {
+            g.lon = lon;
+            g.lat = lat;
+            update_day_night();
+            save_location();
+            return;
+        } else if (pos_update) {
+            APP_LOG(APP_LOG_LEVEL_DEBUG, "ignoring minor position change");
+            return;
+        }
     }
 
     uint32_t secshow = 0;
